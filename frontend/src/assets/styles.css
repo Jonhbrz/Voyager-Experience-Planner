@@ -1,0 +1,145 @@
+:root {
+  --bg: #F4F7F5;
+  --sidebar: #E8EFEA;
+  --navbar: #2F3E34;
+
+  --primary: #4A7C59;
+  --primary-hover: #3B6447;
+
+  --text: #1F2A24;
+  --text-light: #5F6F65;
+
+  --card: #FFFFFF;
+  --activity: #F1F5F2;
+
+  --border: rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  --bg: #1E2521;
+  --sidebar: #2A332D;
+  --navbar: #111713;
+
+  --primary: #5C8F6E;
+  --primary-hover: #4A7C59;
+
+  --text: #E6F0EA;
+  --text-light: #AAB7AF;
+
+  --card: #2F3A33;
+  --activity: #38443D;
+
+  --border: rgba(255, 255, 255, 0.05);
+}
+
+/* base */
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  margin: 0;
+}
+
+/* navbar */
+.navbar {
+  background: var(--navbar);
+  color: white;
+}
+
+/* sidebar */
+.sidebar {
+  background: var(--sidebar);
+}
+
+/* cards (días y dashboard) */
+.day-card,
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border: 1px solid var(--border);
+}
+
+/* header del día */
+.day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+/* botones agrupados */
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* actividades */
+.activities {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.activity {
+  background: var(--activity);
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* textos secundarios */
+h2, h4 {
+  color: var(--text-light);
+}
+
+/* botones */
+button {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--primary-hover);
+}
+
+/* botón principal */
+.primary {
+  background: var(--primary);
+}
+
+/* inputs */
+input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+/* hover sidebar */
+.trip-item {
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.trip-item:hover {
+  background: var(--activity);
+}
+
+.trip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
