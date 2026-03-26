@@ -8,7 +8,7 @@
       </router-link>
 
       <button @click="toggleDark" class="dark-btn">
-        🌙
+        {{ isDark ? '☀️' : '🌙' }}
       </button>
     </header>
 
@@ -113,6 +113,7 @@ onMounted(() => {
   background: transparent;
   border: none;
   font-size: 18px;
+  transition: transform 0.2s ease;
   cursor: pointer;
 }
 

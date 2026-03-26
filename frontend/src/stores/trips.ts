@@ -15,6 +15,7 @@ export const useTripsStore = defineStore('trips', {
       {
         id: 1,
         name: 'Tailandia',
+        description: 'Un viaje para descubrir la cultura y las playas de Tailandia',
         days: [
           {
             id: 1,
@@ -53,6 +54,7 @@ export const useTripsStore = defineStore('trips', {
       const newTrip = {
         id: Date.now(),
         name,
+        description: '',
         days: []
       }
 
