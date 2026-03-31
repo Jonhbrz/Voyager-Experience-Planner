@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import MainLayout from '@/layouts/MainLayout.vue'
 import { useTripsStore } from '@/stores/trips'
+import api from '@/services/api'
+import { onMounted } from 'vue'
 
 const tripsStore = useTripsStore()
 
@@ -11,6 +13,15 @@ const createTrip = () => {
     tripsStore.addTrip(name)
   }
 }
+
+onMounted(async () => {
+  const res = await api.get('/trips')
+  console.log('TRIPS:', res.data)
+})
+
+onMounted(() => {
+  tripsStore.loadTrips()
+})
 </script>
 
 <template>

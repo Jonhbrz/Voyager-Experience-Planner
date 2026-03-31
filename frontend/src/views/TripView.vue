@@ -148,7 +148,8 @@
 
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
+//import { watch } from 'vue'
 import { useTripsStore } from '@/stores/trips'
 import draggable from 'vuedraggable'
 import MainLayout from '@/layouts/MainLayout.vue'
@@ -177,13 +178,13 @@ const trip = computed<Trip | undefined>(() =>
 // 🔥 AUTO GUARDADO GLOBAL
 // =========================
 
-watch(
-  () => tripsStore.trips,
-  (trips) => {
-    localStorage.setItem('trips', JSON.stringify(trips))
-  },
-  { deep: true }
-)
+//watch(
+//  () => tripsStore.trips,
+//  (trips) => {
+//    localStorage.setItem('trips', JSON.stringify(trips))
+//  },
+//  { deep: true }
+//)
 
 // =========================
 // ✈️ VIAJE
