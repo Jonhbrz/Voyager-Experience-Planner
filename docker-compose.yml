@@ -16,7 +16,8 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   app:
-    image: php:8.4-fpm
+    build: 
+      context: ./backend
     container_name: vep_app
     working_dir: /var/www
     volumes:

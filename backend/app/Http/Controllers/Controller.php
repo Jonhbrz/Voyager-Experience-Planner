@@ -2,7 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
+
 abstract class Controller
 {
-    //
+    protected function successResponse(mixed $data, int $status = 200): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+        ], $status);
+    }
 }

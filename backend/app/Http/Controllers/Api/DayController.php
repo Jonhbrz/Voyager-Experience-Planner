@@ -3,40 +3,68 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreDayRequest;
+use App\Http\Requests\UpdateDayRequest;
+use App\Http\Resources\DayResource;
 use App\Models\Day;
 use Illuminate\Http\Request;
 
 class DayController extends Controller
 {
-    public function store(Request $request, $tripId)
+    // GET /api/days
+    public function index(Request $request)
     {
-        $order = Day::where('trip_id', $tripId)->count();
+        $query = Day::with('activities')->orderBy('order');
 
-        $day = Day::create([
-            'trip_id' => $tripId,
-            'title' => $request->title,
-            'order' => $order
-        ]);
+        if ($request->filled('trip_id')) {
+            $query->where('trip_id', (int) $request->query('trip_id'));
+        }
 
-        return $day;
+        return $this->successResponse(DayResource::collection($query->get()), 200);
     }
 
-    public function update(Request $request, $id)
+    // GET /api/days/{id}
+    public function show($id)
     {
-        $day = Day::findOrFail($id);
+        $day = Day::with('activities')->findOrFail($id);
+        return $this->successResponse(new DayResource($day), 200);
+    }
 
-        $day->update([
-            'title' => $request->title
+    // POST /api/days or /api/trips/{tripId}/days
+    public function store(StoreDayRequest $request, $tripId = null)
+    {
+        $validated = $request->validated();
+        $resolvedTripId = $tripId ?? ($validated['trip_id'] ?? null);
+
+        if (!$resolvedTripId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => ['trip_id' => ['The trip_id field is required.']],
+            ], 422);
+        }
+
+        $order = $validated['order'] ?? Day::where('trip_id', $resolvedTripId)->count();
+        $day = Day::create([
+            'trip_id' => $resolvedTripId,
+            'title' => $validated['title'],
+            'order' => $order,
         ]);
 
-        return $day;
+        return $this->successResponse(new DayResource($day), 201);
+    }
+
+    public function update(UpdateDayRequest $request, $id)
+    {
+        $day = Day::findOrFail($id);
+        $day->update($request->validated());
+        return $this->successResponse(new DayResource($day), 200);
     }
 
     public function destroy($id)
     {
         $day = Day::findOrFail($id);
         $day->delete();
-
-        return response()->json(['message' => 'Deleted']);
+        return $this->successResponse(['message' => 'Day deleted successfully.'], 200);
     }
 }

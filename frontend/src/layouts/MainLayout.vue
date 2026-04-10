@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useTripsStore } from '@/stores/trips'
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 
 const router = useRouter()
 const tripsStore = useTripsStore()
@@ -65,7 +65,6 @@ const toggleDark = () => {
   localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
 }
 
-// 👇 cargar al iniciar
 onMounted(() => {
   const savedTheme = localStorage.getItem('theme')
 
@@ -89,6 +88,7 @@ onMounted(() => {
   background: #111;
   color: white;
   display: flex;
+  justify-content: space-between;
   align-items: center;
   padding: 0 20px;
 }
@@ -101,12 +101,6 @@ onMounted(() => {
 
 .logo:hover {
   opacity: 0.8;
-}
-
-.navbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .dark-btn {

@@ -2,6 +2,9 @@
   <MainLayout>
 
     <div v-if="trip">
+      <p v-if="tripsStore.errorMessage" class="error">{{ tripsStore.errorMessage }}</p>
+      <p v-if="tripsStore.isLoading" class="loading">Guardando cambios...</p>
+      <p v-if="tripsStore.successMessage" class="success">{{ tripsStore.successMessage }}</p>
 
       <!-- HEADER VIAJE -->
       <div class="trip-header">
@@ -11,36 +14,33 @@
           <h1>{{ trip.name }}</h1>
 
           <div class="actions">
-            <button @click="startEditTrip">✏️</button>
-            <button @click="deleteTrip">🗑</button>
+            <button :disabled="tripsStore.isLoading" @click="startEditTrip">✏️</button>
+            <button :disabled="tripsStore.isLoading" @click="deleteTrip">🗑</button>
           </div>
         </div>
 
         <!-- MODO EDICIÓN -->
         <div v-else>
-          <input v-model="editTripName" />
-          <button @click="saveTripEdit">Guardar</button>
-          <button @click="cancelTripEdit">Cancelar</button>
+          <input v-model="editTripName" placeholder="Nombre del viaje" />
+          <button :disabled="tripsStore.isLoading" @click="saveTripEdit">Guardar</button>
+          <button :disabled="tripsStore.isLoading" @click="cancelTripEdit">Cancelar</button>
         </div>
 
       </div>
 
       <!-- BOTÓN -->
-      <button class="primary" @click="showForm = !showForm">
+      <button :disabled="tripsStore.isLoading" class="primary" @click="showForm = !showForm">
         + Añadir día
       </button>
 
       <!-- FORMULARIO -->
       <div v-if="showForm" class="form">
         <input v-model="newDayTitle" placeholder="Nombre del día" />
-        <button @click="addDay">Guardar</button>
+        <button :disabled="tripsStore.isLoading || !newDayTitle.trim()" @click="addDay">Guardar</button>
       </div>
 
       <div class="trip-description">
-        <textarea
-          v-model="trip.description"
-          placeholder="Añade una descripción del viaje..."
-        />
+        <textarea v-model="trip.description" placeholder="Añade una descripción del viaje..." />
       </div>
 
       <h2>Días</h2>
@@ -55,7 +55,7 @@
         animation="200"
       >
 
-        <template #item="{ element: day }">
+        <template #item="{ element: day, index }">
           <div class="day-card">
 
             <!-- HEADER -->
@@ -65,20 +65,20 @@
               @click="toggleDay(day.id)"
             >
               <span>
-                Día {{ trip.days.findIndex(d => d.id === day.id) + 1 }} — {{ day.title }}
+                Día {{ index + 1 }} — {{ day.title }}
               </span>
 
               <div class="actions">
-                <button @click.stop="startEditDay(day)">✏️</button>
-                <button @click.stop="deleteDay(day.id)">🗑</button>
+                <button :disabled="tripsStore.isLoading" @click.stop="startEditDay(day)">✏️</button>
+                <button :disabled="tripsStore.isLoading" @click.stop="deleteDay(day.id)">🗑</button>
               </div>
             </div>
 
             <!-- EDICIÓN -->
             <div v-else>
-              <input v-model="editTitle" />
-              <button @click="saveEditDay(day.id)">Guardar</button>
-              <button @click="cancelEditDay">Cancelar</button>
+              <input v-model="editTitle" placeholder="Nombre del día" />
+              <button :disabled="tripsStore.isLoading" @click="saveEditDay(day.id)">Guardar</button>
+              <button :disabled="tripsStore.isLoading" @click="cancelEditDay">Cancelar</button>
             </div>
 
             <!-- ACTIVIDADES -->
@@ -101,15 +101,15 @@
                     <div v-if="editingActivityId !== activity.id">
                       {{ activity.title }}
 
-                      <button @click.stop="startEditActivity(day.id, activity)">✏️</button>
-                      <button @click.stop="deleteActivity(day.id, activity.id)">🗑</button>
+                      <button :disabled="tripsStore.isLoading" @click.stop="startEditActivity(day.id, activity)">✏️</button>
+                      <button :disabled="tripsStore.isLoading" @click.stop="deleteActivity(day.id, activity.id)">🗑</button>
                     </div>
 
                     <!-- EDICIÓN -->
                     <div v-else>
-                      <input v-model="editActivityTitle" />
-                      <button @click="saveEditActivity(day.id, activity.id)">Guardar</button>
-                      <button @click="cancelEditActivity">Cancelar</button>
+                      <input v-model="editActivityTitle" placeholder="Nombre de la actividad" />
+                      <button :disabled="tripsStore.isLoading" @click="saveEditActivity(day.id, activity.id)">Guardar</button>
+                      <button :disabled="tripsStore.isLoading" @click="cancelEditActivity">Cancelar</button>
                     </div>
 
                   </div>
@@ -118,11 +118,8 @@
               </draggable>
 
               <!-- añadir actividad -->
-              <input
-                v-model="newActivityTitle[day.id]"
-                placeholder="Nueva actividad"
-              />
-              <button @click="addActivity(day.id)">
+              <input v-model="newActivityTitle[day.id]" placeholder="Nueva actividad" />
+              <button :disabled="tripsStore.isLoading || !newActivityTitle[day.id]?.trim()" @click="addActivity(day.id)">
                 Añadir
               </button>
 
@@ -148,8 +145,7 @@
 
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
-import { computed, ref } from 'vue'
-//import { watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useTripsStore } from '@/stores/trips'
 import draggable from 'vuedraggable'
 import MainLayout from '@/layouts/MainLayout.vue'
@@ -174,17 +170,11 @@ const trip = computed<Trip | undefined>(() =>
   tripsStore.trips.find(t => t.id === tripId.value)
 )
 
-// =========================
-// 🔥 AUTO GUARDADO GLOBAL
-// =========================
-
-//watch(
-//  () => tripsStore.trips,
-//  (trips) => {
-//    localStorage.setItem('trips', JSON.stringify(trips))
-//  },
-//  { deep: true }
-//)
+onMounted(async () => {
+  if (!tripsStore.trips.length) {
+    await tripsStore.loadTrips()
+  }
+})
 
 // =========================
 // ✈️ VIAJE
@@ -199,9 +189,9 @@ const startEditTrip = () => {
   editTripName.value = trip.value.name
 }
 
-const saveTripEdit = () => {
+const saveTripEdit = async () => {
   if (!editTripName.value.trim()) return
-  tripsStore.updateTripName(tripId.value, editTripName.value)
+  await tripsStore.updateTripName(tripId.value, editTripName.value)
   editingTrip.value = false
 }
 
@@ -209,9 +199,9 @@ const cancelTripEdit = () => {
   editingTrip.value = false
 }
 
-const deleteTrip = () => {
+const deleteTrip = async () => {
   if (!confirm('¿Eliminar este viaje?')) return
-  tripsStore.removeTrip(tripId.value)
+  await tripsStore.removeTrip(tripId.value)
   router.push('/')
 }
 
@@ -222,9 +212,9 @@ const deleteTrip = () => {
 const showForm = ref(false)
 const newDayTitle = ref('')
 
-const addDay = () => {
+const addDay = async () => {
   if (!newDayTitle.value.trim()) return
-  tripsStore.addDayToTrip(tripId.value, newDayTitle.value)
+  await tripsStore.addDayToTrip(tripId.value, newDayTitle.value)
   newDayTitle.value = ''
   showForm.value = false
 }
@@ -237,9 +227,9 @@ const startEditDay = (day: Day) => {
   editTitle.value = day.title
 }
 
-const saveEditDay = (dayId: number) => {
+const saveEditDay = async (dayId: number) => {
   if (!editTitle.value.trim()) return
-  tripsStore.updateDay(tripId.value, dayId, editTitle.value)
+  await tripsStore.updateDay(tripId.value, dayId, editTitle.value)
   editingDayId.value = null
   editTitle.value = ''
 }
@@ -249,8 +239,8 @@ const cancelEditDay = () => {
   editTitle.value = ''
 }
 
-const deleteDay = (dayId: number) => {
-  tripsStore.removeDay(tripId.value, dayId)
+const deleteDay = async (dayId: number) => {
+  await tripsStore.removeDay(tripId.value, dayId)
 }
 
 // =========================
@@ -259,11 +249,11 @@ const deleteDay = (dayId: number) => {
 
 const newActivityTitle = ref<Record<number, string>>({})
 
-const addActivity = (dayId: number) => {
+const addActivity = async (dayId: number) => {
   const title = newActivityTitle.value[dayId]
   if (!title || !title.trim()) return
 
-  tripsStore.addActivity(tripId.value, dayId, title)
+  await tripsStore.addActivity(tripId.value, dayId, title)
   newActivityTitle.value[dayId] = ''
 }
 
@@ -275,10 +265,10 @@ const startEditActivity = (_dayId: number, activity: Activity) => {
   editActivityTitle.value = activity.title
 }
 
-const saveEditActivity = (dayId: number, activityId: number) => {
+const saveEditActivity = async (dayId: number, activityId: number) => {
   if (!editActivityTitle.value.trim()) return
 
-  tripsStore.updateActivity(
+  await tripsStore.updateActivity(
     tripId.value,
     dayId,
     activityId,
@@ -294,8 +284,8 @@ const cancelEditActivity = () => {
   editActivityTitle.value = ''
 }
 
-const deleteActivity = (dayId: number, activityId: number) => {
-  tripsStore.removeActivity(tripId.value, dayId, activityId)
+const deleteActivity = async (dayId: number, activityId: number) => {
+  await tripsStore.removeActivity(tripId.value, dayId, activityId)
 }
 
 // =========================
@@ -310,7 +300,6 @@ const toggleDay = (dayId: number) => {
     : openDays.value.push(dayId)
 }
 
-// Drag & drop → no necesita lógica extra
 const saveOrder = () => {}
 </script>
 
@@ -401,7 +390,6 @@ input {
   gap: 10px;
 }
 
-/* cursor drag */
 .day-card {
   cursor: grab;
 }
@@ -410,7 +398,6 @@ input {
   cursor: grabbing;
 }
 
-/* animación suave */
 .sortable-chosen {
   opacity: 0.6;
 }
@@ -419,8 +406,22 @@ input {
   opacity: 0.3;
 }
 
-/* actividades */
 .activity {
   cursor: grab;
+}
+
+.error {
+  color: #b00020;
+  margin-bottom: 8px;
+}
+
+.loading {
+  color: #444;
+  margin-bottom: 8px;
+}
+
+.success {
+  color: #1b5e20;
+  margin-bottom: 8px;
 }
 </style>

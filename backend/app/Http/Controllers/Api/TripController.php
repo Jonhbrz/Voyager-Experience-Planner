@@ -3,45 +3,49 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreTripRequest;
+use App\Http\Requests\UpdateTripRequest;
+use App\Http\Resources\TripResource;
 use App\Models\Trip;
 use Illuminate\Http\Request;
 
 class TripController extends Controller
 {
     // GET /api/trips
-    public function index()
+    public function index(Request $request)
     {
-        return Trip::with('days.activities')->get();
+        $perPage = (int) $request->query('per_page', 0);
+        $query = Trip::with('days.activities')->latest();
+
+        if ($perPage > 0) {
+            $trips = $query->paginate($perPage);
+        } else {
+            $trips = $query->get();
+        }
+
+        return $this->successResponse(TripResource::collection($trips), 200);
     }
 
     // GET /api/trips/{id}
     public function show($id)
     {
-        return Trip::with('days.activities')->findOrFail($id);
+        $trip = Trip::with('days.activities')->findOrFail($id);
+        return $this->successResponse(new TripResource($trip), 200);
     }
 
-    // POST /api/trips
-    public function store(Request $request)
+    //POST /api/trips
+    public function store(StoreTripRequest $request)
     {
-        $trip = Trip::create([
-            'name' => $request->name,
-            'description' => $request->description
-        ]);
-
-        return response()->json($trip, 201);
+        $trip = Trip::create($request->validated());
+        return $this->successResponse(new TripResource($trip), 201);
     }
 
     // PUT /api/trips/{id}
-    public function update(Request $request, $id)
+    public function update(UpdateTripRequest $request, $id)
     {
         $trip = Trip::findOrFail($id);
-
-        $trip->update([
-            'name' => $request->name,
-            'description' => $request->description
-        ]);
-
-        return $trip;
+        $trip->update($request->validated());
+        return $this->successResponse(new TripResource($trip), 200);
     }
 
     // DELETE /api/trips/{id}
@@ -49,7 +53,6 @@ class TripController extends Controller
     {
         $trip = Trip::findOrFail($id);
         $trip->delete();
-
-        return response()->json(['message' => 'Deleted']);
+        return $this->successResponse(['message' => 'Trip deleted successfully.'], 200);
     }
 }

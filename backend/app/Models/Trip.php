@@ -6,7 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Trip extends Model
 {
-    protected $fillable = ['day_id', 'title', 'order'];
+    protected $fillable = ['name', 'description'];
+
     public function days()
     {
         return $this->hasMany(Day::class)->orderBy('order');

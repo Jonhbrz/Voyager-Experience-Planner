@@ -1,23 +1,17 @@
 <script setup lang="ts">
 import MainLayout from '@/layouts/MainLayout.vue'
 import { useTripsStore } from '@/stores/trips'
-import api from '@/services/api'
 import { onMounted } from 'vue'
 
 const tripsStore = useTripsStore()
 
-const createTrip = () => {
+const createTrip = async () => {
   const name = prompt('Nombre del viaje:')
 
   if (name) {
-    tripsStore.addTrip(name)
+    await tripsStore.addTrip(name.trim())
   }
 }
-
-onMounted(async () => {
-  const res = await api.get('/trips')
-  console.log('TRIPS:', res.data)
-})
 
 onMounted(() => {
   tripsStore.loadTrips()
@@ -28,7 +22,12 @@ onMounted(() => {
   <MainLayout>
     <h1>Mi Experiencia</h1>
 
-    <button @click="createTrip">Crear Viaje</button>
+    <button :disabled="tripsStore.isLoading" @click="createTrip">
+      {{ tripsStore.isLoading ? 'Creando...' : 'Crear viaje' }}
+    </button>
+
+    <p v-if="tripsStore.errorMessage" class="error">{{ tripsStore.errorMessage }}</p>
+    <p v-if="tripsStore.successMessage" class="success">{{ tripsStore.successMessage }}</p>
 
     <div class="stats">
       <div class="card">
@@ -52,5 +51,15 @@ button {
   padding: 20px;
   border-radius: 10px;
   width: 200px;
+}
+
+.error {
+  color: #b00020;
+  margin-bottom: 12px;
+}
+
+.success {
+  color: #1b5e20;
+  margin-bottom: 12px;
 }
 </style>

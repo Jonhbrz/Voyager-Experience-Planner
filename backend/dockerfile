@@ -1,0 +1,14 @@
+FROM php:8.4-fpm
+
+# Instalar dependencias necesarias
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    unzip \
+    git \
+    curl
+
+# Instalar extensiones PHP para Postgres
+RUN docker-php-ext-install pdo pdo_pgsql
+
+# Copiar proyecto
+WORKDIR /var/www
