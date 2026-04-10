@@ -1,14 +1,18 @@
 FROM php:8.4-fpm
 
-# Instalar dependencias necesarias
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     unzip \
     git \
-    curl
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Instalar extensiones PHP para Postgres
-RUN docker-php-ext-install pdo pdo_pgsql
+RUN docker-php-ext-install -j"$(nproc)" pdo pdo_pgsql
 
-# Copiar proyecto
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+COPY php-fpm.d/zz-vep.conf /usr/local/etc/php-fpm.d/zz-vep.conf
+
 WORKDIR /var/www
+
+CMD ["php-fpm"]

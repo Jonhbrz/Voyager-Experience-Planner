@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\TripController;
 use App\Http\Controllers\Api\DayController;
 use App\Http\Controllers\Api\ActivityController;
+use App\Http\Controllers\Api\TransportController;
+use App\Http\Controllers\Api\StayController;
 
 Route::options('{any}', function () {
     return response()->json([], 200);
@@ -31,3 +33,9 @@ Route::post('/activities', [ActivityController::class, 'store']);
 Route::put('/activities/{id}', [ActivityController::class, 'update']);
 Route::patch('/activities/{id}', [ActivityController::class, 'update']);
 Route::delete('/activities/{id}', [ActivityController::class, 'destroy']);
+
+Route::post('/days/{dayId}/transports', [TransportController::class, 'store']);
+Route::delete('/transports/{id}', [TransportController::class, 'destroy']);
+
+Route::post('/days/{dayId}/stays', [StayController::class, 'store']);
+Route::delete('/stays/{id}', [StayController::class, 'destroy']);

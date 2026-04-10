@@ -14,7 +14,7 @@ class ActivityController extends Controller
     // GET /api/activities
     public function index(Request $request)
     {
-        $query = Activity::orderBy('order');
+        $query = Activity::orderBy('start_time')->orderBy('order');
 
         if ($request->filled('day_id')) {
             $query->where('day_id', (int) $request->query('day_id'));
@@ -49,6 +49,8 @@ class ActivityController extends Controller
             'day_id' => $resolvedDayId,
             'title' => $validated['title'],
             'order' => $order,
+            'start_time' => $validated['start_time'],
+            'end_time' => $validated['end_time'] ?? null,
         ]);
 
         return $this->successResponse(new ActivityResource($activity), 201);

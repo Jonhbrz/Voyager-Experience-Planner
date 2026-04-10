@@ -1,12 +1,39 @@
 export interface Activity {
   id: number
+  day_id?: number
   title: string
+  order?: number
+  start_time: string
+  end_time?: string | null
+}
+
+export interface Transport {
+  id: number
+  day_id: number
+  from: string
+  to: string
+  type: string
+  duration?: string | null
+  notes?: string | null
+}
+
+export interface Stay {
+  id: number
+  day_id: number
+  name: string
+  location: string
+  check_in?: string | null
+  check_out?: string | null
+  notes?: string | null
 }
 
 export interface Day {
   id: number
   title: string
+  order?: number
   activities: Activity[]
+  transports: Transport[]
+  stays: Stay[]
 }
 
 export interface Trip {

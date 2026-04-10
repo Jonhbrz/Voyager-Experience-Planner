@@ -15,7 +15,7 @@ class TripController extends Controller
     public function index(Request $request)
     {
         $perPage = (int) $request->query('per_page', 0);
-        $query = Trip::with('days.activities')->latest();
+        $query = Trip::with(['days.activities', 'days.transports', 'days.stays'])->latest();
 
         if ($perPage > 0) {
             $trips = $query->paginate($perPage);
@@ -29,7 +29,7 @@ class TripController extends Controller
     // GET /api/trips/{id}
     public function show($id)
     {
-        $trip = Trip::with('days.activities')->findOrFail($id);
+        $trip = Trip::with(['days.activities', 'days.transports', 'days.stays'])->findOrFail($id);
         return $this->successResponse(new TripResource($trip), 200);
     }
 

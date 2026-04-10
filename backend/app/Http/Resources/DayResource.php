@@ -17,6 +17,8 @@ class DayResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'activities' => ActivityResource::collection($this->whenLoaded('activities')),
+            'transports' => TransportResource::collection($this->whenLoaded('transports')),
+            'stays' => StayResource::collection($this->whenLoaded('stays')),
         ];
     }
 }

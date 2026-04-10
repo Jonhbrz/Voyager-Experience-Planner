@@ -14,7 +14,7 @@ class DayController extends Controller
     // GET /api/days
     public function index(Request $request)
     {
-        $query = Day::with('activities')->orderBy('order');
+        $query = Day::with(['activities', 'transports', 'stays'])->orderBy('order');
 
         if ($request->filled('trip_id')) {
             $query->where('trip_id', (int) $request->query('trip_id'));
@@ -26,7 +26,7 @@ class DayController extends Controller
     // GET /api/days/{id}
     public function show($id)
     {
-        $day = Day::with('activities')->findOrFail($id);
+        $day = Day::with(['activities', 'transports', 'stays'])->findOrFail($id);
         return $this->successResponse(new DayResource($day), 200);
     }
 
@@ -50,6 +50,7 @@ class DayController extends Controller
             'title' => $validated['title'],
             'order' => $order,
         ]);
+        $day->load(['activities', 'transports', 'stays']);
 
         return $this->successResponse(new DayResource($day), 201);
     }
@@ -58,6 +59,8 @@ class DayController extends Controller
     {
         $day = Day::findOrFail($id);
         $day->update($request->validated());
+        $day->load(['activities', 'transports', 'stays']);
+
         return $this->successResponse(new DayResource($day), 200);
     }
 

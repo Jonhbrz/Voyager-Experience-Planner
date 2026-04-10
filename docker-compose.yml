@@ -14,12 +14,15 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    command: postgres -c fsync=off -c synchronous_commit=off
 
   app:
     build: 
       context: ./backend
     container_name: vep_app
     working_dir: /var/www
+    expose:
+      - "9000"
     volumes:
       - ./backend:/var/www
     depends_on:
