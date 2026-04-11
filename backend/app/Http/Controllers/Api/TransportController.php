@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreTransportRequest;
 use App\Http\Resources\TransportResource;
+use App\Models\Day;
 use App\Models\Transport;
+use Illuminate\Http\Request;
 
 class TransportController extends Controller
 {
@@ -22,6 +24,10 @@ class TransportController extends Controller
             ], 422);
         }
 
+        Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->whereKey($resolvedDayId)
+            ->firstOrFail();
+
         $transport = Transport::create([
             'day_id' => $resolvedDayId,
             'from' => $validated['from'],
@@ -34,9 +40,10 @@ class TransportController extends Controller
         return $this->successResponse(new TransportResource($transport), 201);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $transport = Transport::findOrFail($id);
+        $transport = Transport::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
         $transport->delete();
 
         return $this->successResponse(['message' => 'Transport deleted successfully.'], 200);

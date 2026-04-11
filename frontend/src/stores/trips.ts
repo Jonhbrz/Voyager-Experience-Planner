@@ -5,6 +5,19 @@ import api from '@/services/api'
 
 let messageDismissTimer: ReturnType<typeof setTimeout> | null = null
 
+/** Garantiza YYYY-MM-DD para la API (evita ISO con zona horaria). */
+function toTripApiDate(value: string): string {
+  const trimmed = value.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed
+  }
+  const isoDate = trimmed.match(/^(\d{4}-\d{2}-\d{2})T/)
+  if (isoDate) {
+    return isoDate[1] ?? trimmed
+  }
+  return trimmed
+}
+
 function scheduleMessageAutoClear(store: {
   clearSuccess: () => void
   clearError: () => void
@@ -25,11 +38,14 @@ export const useTripsStore = defineStore('trips', {
     isLoading: boolean
     errorMessage: string | null
     successMessage: string | null
+    /** Tras el primer `loadTrips` terminado (éxito o error); evita skeleton en recargas con datos en memoria. */
+    initialLoadDone: boolean
   } => ({
     trips: [],
     isLoading: false,
     errorMessage: null,
-    successMessage: null
+    successMessage: null,
+    initialLoadDone: false,
   }),
 
   getters: {
@@ -109,28 +125,38 @@ export const useTripsStore = defineStore('trips', {
     },
 
     async loadTrips() {
-      await this.runRequest(
-        'No se pudieron cargar los viajes.',
-        null,
-        async () => {
-          const res = await api.get('/trips')
-          const raw = res.data.data as Trip[]
-          this.trips = Array.isArray(raw) ? raw.map(t => this.normalizeTripDays(t)) : []
-        }
-      )
+      try {
+        await this.runRequest(
+          'No se pudieron cargar los viajes.',
+          null,
+          async () => {
+            const res = await api.get('/trips')
+            const raw = res.data.data as Trip[]
+            this.trips = Array.isArray(raw) ? raw.map(t => this.normalizeTripDays(t)) : []
+          }
+        )
+      } finally {
+        this.initialLoadDone = true
+      }
     },
 
-    async addTrip(name: string) {
+    async addTrip(
+      name: string,
+      description = '',
+      start_date: string,
+      end_date: string
+    ) {
       await this.runRequest('No se pudo crear el viaje.', 'Viaje creado correctamente.', async () => {
-        const res = await api.post('/trips', {
-          name,
-          description: ''
-        })
+        const payload = {
+          name: (name ?? '').trim(),
+          description: (description ?? '').trim(),
+          start_date: toTripApiDate(start_date ?? ''),
+          end_date: toTripApiDate(end_date ?? ''),
+        }
+        const res = await api.post('/trips', payload)
 
-        this.trips.push({
-          ...res.data.data,
-          days: []
-        })
+        const raw = res.data.data as Trip
+        this.trips.push(this.normalizeTripDays(raw))
       })
     },
 
@@ -141,7 +167,7 @@ export const useTripsStore = defineStore('trips', {
       await this.runRequest('No se pudo actualizar el viaje.', 'Viaje actualizado.', async () => {
         await api.put(`/trips/${tripId}`, {
           name: newName,
-          description: trip.description
+          description: trip.description ?? '',
         })
 
         trip.name = newName
@@ -271,6 +297,22 @@ export const useTripsStore = defineStore('trips', {
       await this.runRequest('No se pudo eliminar la actividad.', 'Actividad eliminada.', async () => {
         await api.delete(`/activities/${activityId}`)
         day.activities = day.activities.filter(a => a.id !== activityId)
+      })
+    },
+
+    /** Elimina todas las actividades del día (transportes y estancias no se tocan). */
+    async clearDayActivities(tripId: number, dayId: number) {
+      const trip = this.trips.find(t => t.id === tripId)
+      if (!trip) return
+
+      const day = trip.days.find(d => d.id === dayId)
+      if (!day || !day.activities.length) return
+
+      await this.runRequest('No se pudo vaciar el día.', 'Actividades eliminadas.', async () => {
+        for (const a of [...day.activities]) {
+          await api.delete(`/activities/${a.id}`)
+        }
+        day.activities = []
       })
     },
 

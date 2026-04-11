@@ -50,3 +50,58 @@ export function getFirstScheduledActivity(
 export function tripActivityCount(trip: Trip): number {
   return (trip.days || []).reduce((n, d) => n + (d.activities?.length ?? 0), 0)
 }
+
+/** Minutos desde medianoche para comparar horas tipo "09:00" o "09:00:00". */
+function parseTimeToMinutes(t: string): number | null {
+  const m = String(t).trim().match(/^(\d{1,2}):(\d{2})/)
+  if (!m?.[1] || m[2] == null) return null
+  const h = parseInt(m[1], 10)
+  const min = parseInt(m[2], 10)
+  if (Number.isNaN(h) || Number.isNaN(min) || h < 0 || h > 23 || min < 0 || min > 59) {
+    return null
+  }
+  return h * 60 + min
+}
+
+/**
+ * Primera actividad cuya hora de inicio es estrictamente posterior a la hora actual (mismo día local).
+ * Solo compara HH:mm del viaje con la hora del reloj del usuario.
+ */
+export function getNextFutureActivity(
+  trip: Trip
+): { title: string; start_time: string; dayTitle: string } | null {
+  const now = new Date()
+  const nowM = now.getHours() * 60 + now.getMinutes()
+
+  for (const day of sortDaysForItinerary(trip.days || [])) {
+    const acts = sortActivitiesByTime(day.activities || [])
+    for (const a of acts) {
+      const tm = parseTimeToMinutes(a.start_time || '')
+      if (tm === null) continue
+      if (tm > nowM) {
+        return {
+          title: a.title,
+          start_time: a.start_time || '—',
+          dayTitle: day.title,
+        }
+      }
+    }
+  }
+  return null
+}
+
+/** Primeras `max` actividades del itinerario (días ordenados, luego por hora). */
+export function getTripActivityPreview(
+  trip: Trip,
+  max: number = 2
+): { start_time: string; title: string }[] {
+  const out: { start_time: string; title: string }[] = []
+  for (const day of sortDaysForItinerary(trip.days || [])) {
+    const acts = sortActivitiesByTime(day.activities || [])
+    for (const a of acts) {
+      out.push({ start_time: a.start_time || '—', title: a.title })
+      if (out.length >= max) return out
+    }
+  }
+  return out
+}

@@ -7,12 +7,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN docker-php-ext-install -j"$(nproc)" pdo pdo_pgsql
+RUN docker-php-ext-install -j"$(nproc)" opcache pdo pdo_pgsql
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 COPY php-fpm.d/zz-vep.conf /usr/local/etc/php-fpm.d/zz-vep.conf
+COPY php/conf.d/zz-opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
 
 WORKDIR /var/www
 
+COPY . .
+
+# Sin .env en build: --no-scripts evita artisan/package:discover hasta runtime
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint-vep.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-vep.sh
+
+ENTRYPOINT ["docker-entrypoint-vep.sh"]
 CMD ["php-fpm"]

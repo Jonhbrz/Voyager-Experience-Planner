@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreStayRequest;
 use App\Http\Resources\StayResource;
+use App\Models\Day;
 use App\Models\Stay;
+use Illuminate\Http\Request;
 
 class StayController extends Controller
 {
@@ -22,6 +24,10 @@ class StayController extends Controller
             ], 422);
         }
 
+        Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->whereKey($resolvedDayId)
+            ->firstOrFail();
+
         $stay = Stay::create([
             'day_id' => $resolvedDayId,
             'name' => $validated['name'],
@@ -34,9 +40,10 @@ class StayController extends Controller
         return $this->successResponse(new StayResource($stay), 201);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $stay = Stay::findOrFail($id);
+        $stay = Stay::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
         $stay->delete();
 
         return $this->successResponse(['message' => 'Stay deleted successfully.'], 200);

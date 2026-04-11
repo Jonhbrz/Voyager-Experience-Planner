@@ -7,6 +7,7 @@ use App\Http\Requests\StoreActivityRequest;
 use App\Http\Requests\UpdateActivityRequest;
 use App\Http\Resources\ActivityResource;
 use App\Models\Activity;
+use App\Models\Day;
 use Illuminate\Http\Request;
 
 class ActivityController extends Controller
@@ -14,7 +15,10 @@ class ActivityController extends Controller
     // GET /api/activities
     public function index(Request $request)
     {
-        $query = Activity::orderBy('start_time')->orderBy('order');
+        $query = Activity::query()
+            ->whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->orderBy('start_time')
+            ->orderBy('order');
 
         if ($request->filled('day_id')) {
             $query->where('day_id', (int) $request->query('day_id'));
@@ -24,9 +28,11 @@ class ActivityController extends Controller
     }
 
     // GET /api/activities/{id}
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $activity = Activity::findOrFail($id);
+        $activity = Activity::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
+
         return $this->successResponse(new ActivityResource($activity), 200);
     }
 
@@ -44,6 +50,10 @@ class ActivityController extends Controller
             ], 422);
         }
 
+        Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->whereKey($resolvedDayId)
+            ->firstOrFail();
+
         $order = $validated['order'] ?? Activity::where('day_id', $resolvedDayId)->count();
         $activity = Activity::create([
             'day_id' => $resolvedDayId,
@@ -58,14 +68,17 @@ class ActivityController extends Controller
 
     public function update(UpdateActivityRequest $request, $id)
     {
-        $activity = Activity::findOrFail($id);
+        $activity = Activity::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
         $activity->update($request->validated());
+
         return $this->successResponse(new ActivityResource($activity), 200);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $activity = Activity::findOrFail($id);
+        $activity = Activity::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
         $activity->delete();
         return $this->successResponse(['message' => 'Activity deleted successfully.'], 200);
     }

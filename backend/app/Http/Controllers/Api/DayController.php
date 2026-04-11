@@ -14,19 +14,28 @@ class DayController extends Controller
     // GET /api/days
     public function index(Request $request)
     {
-        $query = Day::with(['activities', 'transports', 'stays'])->orderBy('order');
+        $userId = $request->user()->id;
+
+        $query = Day::with(['activities', 'transports', 'stays'])
+            ->whereHas('trip', fn ($q) => $q->where('user_id', $userId))
+            ->orderBy('order');
 
         if ($request->filled('trip_id')) {
-            $query->where('trip_id', (int) $request->query('trip_id'));
+            $tripId = (int) $request->query('trip_id');
+            $request->user()->trips()->whereKey($tripId)->firstOrFail();
+            $query->where('trip_id', $tripId);
         }
 
         return $this->successResponse(DayResource::collection($query->get()), 200);
     }
 
     // GET /api/days/{id}
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $day = Day::with(['activities', 'transports', 'stays'])->findOrFail($id);
+        $day = Day::with(['activities', 'transports', 'stays'])
+            ->whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
+
         return $this->successResponse(new DayResource($day), 200);
     }
 
@@ -44,6 +53,8 @@ class DayController extends Controller
             ], 422);
         }
 
+        $request->user()->trips()->whereKey($resolvedTripId)->firstOrFail();
+
         $order = $validated['order'] ?? Day::where('trip_id', $resolvedTripId)->count();
         $day = Day::create([
             'trip_id' => $resolvedTripId,
@@ -57,16 +68,18 @@ class DayController extends Controller
 
     public function update(UpdateDayRequest $request, $id)
     {
-        $day = Day::findOrFail($id);
+        $day = Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
         $day->update($request->validated());
         $day->load(['activities', 'transports', 'stays']);
 
         return $this->successResponse(new DayResource($day), 200);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $day = Day::findOrFail($id);
+        $day = Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
         $day->delete();
         return $this->successResponse(['message' => 'Day deleted successfully.'], 200);
     }

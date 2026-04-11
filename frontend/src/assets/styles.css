@@ -1,35 +1,29 @@
 :root {
-  --bg: #F4F7F5;
-  --sidebar: #E8EFEA;
-  --navbar: #2F3E34;
+  --bg: #ffffff;
+  --text: #111111;
+  --text-light: #666666;
+  --primary: #22c55e;
+  --primary-hover: #16a34a;
+  --border: #e5e7eb;
 
-  --primary: #4A7C59;
-  --primary-hover: #3B6447;
-
-  --text: #1F2A24;
-  --text-light: #5F6F65;
-
-  --card: #FFFFFF;
-  --activity: #F1F5F2;
-
-  --border: rgba(0, 0, 0, 0.08);
+  --sidebar: #ecfdf5;
+  --navbar: #14532d;
+  --card: #ffffff;
+  --activity: #f0fdf4;
 }
 
 .dark {
-  --bg: #1E2521;
-  --sidebar: #2A332D;
-  --navbar: #111713;
+  --bg: #0f1f1a;
+  --text: #e5e5e5;
+  --text-light: #9ac7b8;
+  --primary: #22c55e;
+  --primary-hover: #16a34a;
+  --border: #1f3a33;
 
-  --primary: #5C8F6E;
-  --primary-hover: #4A7C59;
-
-  --text: #E6F0EA;
-  --text-light: #AAB7AF;
-
-  --card: #2F3A33;
-  --activity: #38443D;
-
-  --border: rgba(255, 255, 255, 0.05);
+  --sidebar: #152922;
+  --navbar: #0a1612;
+  --card: #152922;
+  --activity: #1e322a;
 }
 
 /* base */
@@ -94,7 +88,8 @@ body {
 }
 
 /* textos secundarios */
-h2, h4 {
+h2,
+h4 {
   color: var(--text-light);
 }
 
@@ -108,22 +103,40 @@ button {
   cursor: pointer;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   background: var(--primary-hover);
 }
 
 /* botón principal */
 .primary {
   background: var(--primary);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
 }
 
 /* inputs */
-input {
+input,
+textarea {
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-light);
+  opacity: 0.9;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--text-light);
+  opacity: 1;
 }
 
 /* hover sidebar */
@@ -142,4 +155,9 @@ input {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+}
+
+/* Espaciado vertical entre bloques principales (p. ej. TripView) */
+.section + .section {
+  margin-top: 24px;
 }

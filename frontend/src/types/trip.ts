@@ -40,5 +40,8 @@ export interface Trip {
   id: number
   name: string
   description?: string
+  /** ISO YYYY-MM-DD; opcional para viajes antiguos */
+  start_date?: string | null
+  end_date?: string | null
   days: Day[]
 }
