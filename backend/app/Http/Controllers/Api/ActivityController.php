@@ -61,6 +61,7 @@ class ActivityController extends Controller
             'order' => $order,
             'start_time' => $validated['start_time'],
             'end_time' => $validated['end_time'] ?? null,
+            'completed' => $validated['completed'] ?? false,
         ]);
 
         return $this->successResponse(new ActivityResource($activity), 201);

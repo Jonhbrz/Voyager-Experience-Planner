@@ -22,7 +22,8 @@ COPY . .
 RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint-vep.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint-vep.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-vep.sh \
+    && sed -i 's/\r$//' /usr/local/bin/docker-entrypoint-vep.sh
 
 ENTRYPOINT ["docker-entrypoint-vep.sh"]
 CMD ["php-fpm"]

@@ -7,6 +7,7 @@ import type { Trip } from '@/types/trip'
 import {
   getNextFutureActivity,
   getTripActivityPreview,
+  getTripProgress,
   tripActivityCount,
 } from '@/utils/tripUi'
 import { getTripDuration } from '@/utils/tripDates'
@@ -29,7 +30,7 @@ function toYmd(d: Date): string {
 }
 
 const openCreateTripPanel = () => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isLoading || tripsStore.isCreatingTrip) return
   createTripFormError.value = null
   if (!startDate.value || !endDate.value) {
     const today = new Date()
@@ -57,7 +58,7 @@ watch(startDate, (s) => {
 })
 
 const submitCreateTrip = async () => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isLoading || tripsStore.isCreatingTrip) return
   createTripFormError.value = null
   const name = newTripName.value.trim()
   if (!name) return
@@ -96,13 +97,13 @@ function activityPreview(trip: Trip) {
 function nextActivityLine(trip: Trip): string | null {
   const next = getNextFutureActivity(trip)
   if (!next) return null
-  return `🕘 Próxima: ${next.title} — ${next.start_time}`
+  return `🕘 Próxima pendiente: ${next.title} — ${next.start_time}`
 }
 
-function nextActivityStatus(trip: Trip): 'empty' | 'no-future' | 'has-next' {
+function nextActivityStatus(trip: Trip): 'empty' | 'no-pending' | 'has-next' {
   const total = tripActivityCount(trip)
   if (total === 0) return 'empty'
-  if (!getNextFutureActivity(trip)) return 'no-future'
+  if (!getNextFutureActivity(trip)) return 'no-pending'
   return 'has-next'
 }
 
@@ -125,6 +126,10 @@ const totalDays = computed(() => {
 const goTrip = (id: number) => {
   router.push(`/trip/${id}`)
 }
+
+function tripProgress(trip: Trip) {
+  return getTripProgress(trip)
+}
 </script>
 
 <template>
@@ -134,7 +139,7 @@ const goTrip = (id: number) => {
       <button
         type="button"
         class="btn-create"
-        :disabled="tripsStore.isLoading"
+        :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip"
         aria-label="Abrir formulario para crear un nuevo viaje"
         @click="openCreateTripPanel"
       >
@@ -152,7 +157,7 @@ const goTrip = (id: number) => {
             type="text"
             autocomplete="off"
             placeholder="Ej. Primavera en Kyoto"
-            :disabled="tripsStore.isLoading"
+            :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip"
             required
           />
         </label>
@@ -162,13 +167,13 @@ const goTrip = (id: number) => {
             v-model="newTripDescription"
             rows="3"
             placeholder="Notas o resumen del viaje (opcional)"
-            :disabled="tripsStore.isLoading"
+            :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip"
           />
         </label>
         <div class="create-trip-dates">
           <label class="create-trip-field create-trip-field--inline">
             <span>Inicio</span>
-            <input v-model="startDate" type="date" required :disabled="tripsStore.isLoading" />
+            <input v-model="startDate" type="date" required :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip" />
           </label>
           <label class="create-trip-field create-trip-field--inline">
             <span>Fin</span>
@@ -177,7 +182,7 @@ const goTrip = (id: number) => {
               type="date"
               required
               :min="startDate || undefined"
-              :disabled="tripsStore.isLoading"
+              :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip"
             />
           </label>
         </div>
@@ -188,11 +193,11 @@ const goTrip = (id: number) => {
           <button
             type="submit"
             class="btn-create-submit"
-            :disabled="tripsStore.isLoading || !newTripName.trim() || !startDate || !endDate"
+            :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip || !newTripName.trim() || !startDate || !endDate"
           >
-            {{ tripsStore.isLoading ? 'Creando...' : 'Crear' }}
+            {{ tripsStore.isCreatingTrip ? 'Creando...' : 'Crear' }}
           </button>
-          <button type="button" class="btn-create-cancel" :disabled="tripsStore.isLoading" @click="cancelCreateTrip">
+          <button type="button" class="btn-create-cancel" :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip" @click="cancelCreateTrip">
             Cancelar
           </button>
         </div>
@@ -200,7 +205,7 @@ const goTrip = (id: number) => {
     </div>
 
     <div
-      v-if="!tripsStore.initialLoadDone && tripsStore.isLoading && !tripsSorted.length"
+      v-if="tripsStore.isBootstrapping && !tripsSorted.length"
       class="dashboard-skeleton"
       aria-busy="true"
       aria-label="Cargando viajes"
@@ -250,7 +255,21 @@ const goTrip = (id: number) => {
         <ul class="trip-meta">
           <li>{{ dayCount(trip) }} {{ dayCount(trip) === 1 ? 'día' : 'días' }}</li>
           <li>{{ activityCount(trip) }} {{ activityCount(trip) === 1 ? 'actividad' : 'actividades' }}</li>
+          <li v-if="activityCount(trip) > 0" class="trip-progress-meta">
+            Progreso {{ tripProgress(trip) }}%
+          </li>
         </ul>
+        <div
+          v-if="activityCount(trip) > 0"
+          class="trip-progress-bar"
+          role="progressbar"
+          :aria-valuenow="tripProgress(trip)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="`Progreso del viaje ${trip.name}: ${tripProgress(trip)} por ciento`"
+        >
+          <div class="trip-progress-fill" :style="{ width: `${tripProgress(trip)}%` }" />
+        </div>
         <ul v-if="activityPreview(trip).length" class="trip-preview">
           <li v-for="(row, idx) in activityPreview(trip)" :key="idx" class="trip-preview-row">
             <span class="trip-preview-time">🕘 {{ row.start_time }}</span>
@@ -260,8 +279,8 @@ const goTrip = (id: number) => {
         <p v-if="nextActivityStatus(trip) === 'has-next'" class="trip-next">
           {{ nextActivityLine(trip) }}
         </p>
-        <p v-else-if="nextActivityStatus(trip) === 'no-future'" class="trip-next muted">
-          Sin próximas actividades
+        <p v-else-if="nextActivityStatus(trip) === 'no-pending'" class="trip-next muted">
+          Sin actividades pendientes
         </p>
         <p v-else class="trip-next muted">
           Sin actividades todavía — abre el viaje para planificar
@@ -587,6 +606,27 @@ h1 {
 
 .trip-meta li {
   margin-bottom: 4px;
+}
+
+.trip-progress-meta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.trip-progress-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 0 0 12px;
+  overflow: hidden;
+}
+
+.trip-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 4px;
+  transition: width 0.22s ease;
 }
 
 .trip-preview {

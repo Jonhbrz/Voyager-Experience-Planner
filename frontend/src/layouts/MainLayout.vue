@@ -38,11 +38,19 @@
     </header>
 
     <!-- CONTENIDO -->
-    <div class="content">
+    <div class="content" :class="{ collapsed: layoutStore.isSidebarCollapsed }">
 
       <!-- SIDEBAR -->
-      <aside class="sidebar">
-        <h3>Viajes</h3>
+      <aside class="sidebar" :class="{ collapsed: layoutStore.isSidebarCollapsed }">
+        <button
+          type="button"
+          class="sidebar-toggle"
+          :aria-label="layoutStore.isSidebarCollapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral'"
+          @click="layoutStore.toggleSidebar"
+        >
+          ⮜
+        </button>
+        <h3 class="sidebar-title label">Viajes</h3>
         <ul>
           <li
             v-for="trip in tripsStore.trips"
@@ -54,13 +62,13 @@
             @keydown.enter.prevent="goToTrip(trip.id)"
             @keydown.space.prevent="goToTrip(trip.id)"
           >
-            {{ trip.name }}
+            <span class="label">{{ trip.name }}</span>
           </li>
         </ul>
       </aside>
 
       <!-- MAIN -->
-      <main class="main">
+      <main class="main" :class="{ collapsed: layoutStore.isSidebarCollapsed }">
         <slot />
       </main>
 
@@ -72,11 +80,13 @@
 import { useRouter } from 'vue-router'
 import { useTripsStore } from '@/stores/trips'
 import { useAuthStore } from '@/stores/auth'
+import { useLayoutStore } from '@/stores/layout'
 import { onMounted, ref } from 'vue'
 
 const router = useRouter()
 const tripsStore = useTripsStore()
 const authStore = useAuthStore()
+const layoutStore = useLayoutStore()
 
 const onLogout = () => {
   void authStore.logout()
@@ -247,19 +257,97 @@ onMounted(() => {
 .content {
   flex: 1;
   display: flex;
+  position: relative;
 }
 
 .sidebar {
-  width: 220px;
+  position: relative;
+  width: 240px;
   background: var(--sidebar);
   padding: 20px;
   border-right: 1px solid var(--border);
+  overflow: visible;
+  transition: all 0.3s ease;
+}
+
+.sidebar.collapsed {
+  width: 70px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.sidebar-toggle {
+  position: fixed;
+  top: 80px;
+  left: 224px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transform: none;
+  transition: left 0.3s ease, transform 0.3s ease;
+}
+
+.sidebar-toggle:hover {
+  transform: scale(1.05);
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  left: 54px;
+  transform: rotate(180deg);
+}
+
+.sidebar.collapsed .sidebar-toggle:hover {
+  transform: rotate(180deg) scale(1.05);
+}
+
+.sidebar-title {
+  margin-top: 0;
+  padding-right: 20px;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.sidebar li {
+  list-style: none;
+}
+
+.sidebar.collapsed li {
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar.collapsed li::marker {
+  content: '';
+}
+
+.sidebar.collapsed a {
+  justify-content: center;
+}
+
+.sidebar.collapsed .label {
+  display: none;
 }
 
 .trip-item {
   cursor: pointer;
   padding: 8px;
   border-radius: 6px;
+  white-space: nowrap;
 }
 
 .trip-item:hover {
@@ -269,6 +357,11 @@ onMounted(() => {
 .main {
   flex: 1;
   padding: 20px;
+  transition: margin-left 0.3s ease;
+}
+
+.main.collapsed {
+  margin-left: 0;
 }
 
 @media (max-width: 768px) {
@@ -322,7 +415,26 @@ onMounted(() => {
   }
 
   .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    width: min(80vw, 280px);
     padding: 14px 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    transform: translateX(0);
+  }
+
+  .sidebar.collapsed {
+    transform: translateX(-100%);
+    width: min(80vw, 280px);
+    padding-left: 14px;
+    padding-right: 12px;
+  }
+
+  .content.collapsed .main {
+    margin-left: 0;
   }
 }
 </style>

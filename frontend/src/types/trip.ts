@@ -5,6 +5,8 @@ export interface Activity {
   order?: number
   start_time: string
   end_time?: string | null
+  /** Completada por el usuario (omitida en APIs antiguas → false). */
+  completed?: boolean
 }
 
 export interface Transport {

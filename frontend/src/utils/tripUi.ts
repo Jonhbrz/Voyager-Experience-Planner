@@ -1,5 +1,9 @@
 import type { Activity, Day, Trip } from '@/types/trip'
 
+function isActivityPending(a: Activity): boolean {
+  return !(a.completed ?? false)
+}
+
 export function transportIcon(type: string): string {
   const t = type.toLowerCase()
   if (/avión|avion|plane|vuelo|fly|aeropuerto|airport/.test(t)) return '✈️'
@@ -29,12 +33,12 @@ export function sortActivitiesByTime(activities: Activity[]): Activity[] {
   })
 }
 
-/** Primera actividad del itinerario (días en orden, luego por hora). */
+/** Primera actividad pendiente del itinerario (días en orden, luego por hora). */
 export function getFirstScheduledActivity(
   trip: Trip
 ): { title: string; start_time: string; dayTitle: string } | null {
   for (const day of sortDaysForItinerary(trip.days || [])) {
-    const acts = sortActivitiesByTime(day.activities || [])
+    const acts = sortActivitiesByTime(day.activities || []).filter(isActivityPending)
     const a = acts[0]
     if (a) {
       return {
@@ -51,6 +55,13 @@ export function tripActivityCount(trip: Trip): number {
   return (trip.days || []).reduce((n, d) => n + (d.activities?.length ?? 0), 0)
 }
 
+/** Porcentaje 0–100 de actividades marcadas como completadas. */
+export function getTripProgress(trip: Trip): number {
+  const activities = (trip.days ?? []).flatMap(d => d.activities ?? [])
+  const completed = activities.filter(a => !!(a.completed ?? false)).length
+  return activities.length ? Math.round((completed / activities.length) * 100) : 0
+}
+
 /** Minutos desde medianoche para comparar horas tipo "09:00" o "09:00:00". */
 function parseTimeToMinutes(t: string): number | null {
   const m = String(t).trim().match(/^(\d{1,2}):(\d{2})/)
@@ -63,41 +74,63 @@ function parseTimeToMinutes(t: string): number | null {
   return h * 60 + min
 }
 
+type DayActivityRef = { day: Day; activity: Activity }
+
+function pendingActivitiesInOrder(trip: Trip): DayActivityRef[] {
+  const out: DayActivityRef[] = []
+  for (const day of sortDaysForItinerary(trip.days || [])) {
+    for (const activity of sortActivitiesByTime(day.activities || [])) {
+      if (isActivityPending(activity)) {
+        out.push({ day, activity })
+      }
+    }
+  }
+  return out
+}
+
 /**
- * Primera actividad cuya hora de inicio es estrictamente posterior a la hora actual (mismo día local).
- * Solo compara HH:mm del viaje con la hora del reloj del usuario.
+ * Siguiente actividad pendiente: primero una con hora de inicio posterior a ahora (mismo día local);
+ * si no hay, la primera pendiente en orden de itinerario (p. ej. retrasada).
+ * Ignora actividades marcadas como completadas.
  */
 export function getNextFutureActivity(
   trip: Trip
 ): { title: string; start_time: string; dayTitle: string } | null {
+  const pending = pendingActivitiesInOrder(trip)
+  if (!pending.length) {
+    return null
+  }
+
   const now = new Date()
   const nowM = now.getHours() * 60 + now.getMinutes()
 
-  for (const day of sortDaysForItinerary(trip.days || [])) {
-    const acts = sortActivitiesByTime(day.activities || [])
-    for (const a of acts) {
-      const tm = parseTimeToMinutes(a.start_time || '')
-      if (tm === null) continue
-      if (tm > nowM) {
-        return {
-          title: a.title,
-          start_time: a.start_time || '—',
-          dayTitle: day.title,
-        }
+  for (const { day, activity } of pending) {
+    const tm = parseTimeToMinutes(activity.start_time || '')
+    if (tm !== null && tm > nowM) {
+      return {
+        title: activity.title,
+        start_time: activity.start_time || '—',
+        dayTitle: day.title,
       }
     }
   }
-  return null
+
+  const first = pending[0]!
+  return {
+    title: first.activity.title,
+    start_time: first.activity.start_time || '—',
+    dayTitle: first.day.title,
+  }
 }
 
-/** Primeras `max` actividades del itinerario (días ordenados, luego por hora). */
+/** Primeras `max` actividades pendientes del itinerario (días ordenados, luego por hora). */
 export function getTripActivityPreview(
   trip: Trip,
   max: number = 2
 ): { start_time: string; title: string }[] {
   const out: { start_time: string; title: string }[] = []
   for (const day of sortDaysForItinerary(trip.days || [])) {
-    const acts = sortActivitiesByTime(day.activities || [])
+    const acts = sortActivitiesByTime(day.activities || []).filter(isActivityPending)
     for (const a of acts) {
       out.push({ start_time: a.start_time || '—', title: a.title })
       if (out.length >= max) return out

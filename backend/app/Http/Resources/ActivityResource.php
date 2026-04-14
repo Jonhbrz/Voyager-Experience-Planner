@@ -17,6 +17,7 @@ class ActivityResource extends JsonResource
             'order' => $this->order,
             'start_time' => $this->formatTime($this->start_time),
             'end_time' => $this->formatTime($this->end_time),
+            'completed' => (bool) $this->completed,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

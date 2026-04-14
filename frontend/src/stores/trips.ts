@@ -1,9 +1,33 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 import axios from 'axios'
-import type { Trip, Day } from '@/types/trip'
+import type { Trip, Day, Activity, Transport, Stay } from '@/types/trip'
 import api from '@/services/api'
 
 let messageDismissTimer: ReturnType<typeof setTimeout> | null = null
+
+// —— Request queue (serializa llamadas API; evita condiciones de carrera) ——
+const requestQueue: Array<() => Promise<void>> = []
+let isProcessingQueue = false
+
+function enqueueRequest(requestFn: () => Promise<void>) {
+  requestQueue.push(requestFn)
+  void processQueue()
+}
+
+async function processQueue() {
+  if (isProcessingQueue) return
+  isProcessingQueue = true
+  while (requestQueue.length) {
+    const req = requestQueue.shift()
+    if (!req) continue
+    try {
+      await req()
+    } catch (e) {
+      console.error('Queue error', e)
+    }
+  }
+  isProcessingQueue = false
+}
 
 /** Garantiza YYYY-MM-DD para la API (evita ISO con zona horaria). */
 function toTripApiDate(value: string): string {
@@ -32,29 +56,113 @@ function scheduleMessageAutoClear(store: {
   }, 3000)
 }
 
+function sortedActivitiesCopy(activities: Activity[]): Activity[] {
+  return [...activities].sort((a, b) => {
+    const t1 = a.start_time || ''
+    const t2 = b.start_time || ''
+    if (t1 !== t2) return t1.localeCompare(t2)
+    return (a.order ?? 0) - (b.order ?? 0)
+  })
+}
+
+function tripHasActivity(trip: Trip, activityId: number): boolean {
+  return trip.days.some(d => d.activities.some(a => a.id === activityId))
+}
+
+/** Sustituye una actividad por id en todo el árbol de viajes (reactividad inmutable). */
+function mapTripsPatchActivity(
+  trips: Trip[],
+  activityId: number,
+  patch: Partial<Activity>
+): Trip[] {
+  return trips.map(trip => {
+    if (!tripHasActivity(trip, activityId)) return trip
+    return {
+      ...trip,
+      days: trip.days.map(day => ({
+        ...day,
+        activities: day.activities.map(a =>
+          a.id === activityId ? { ...a, ...patch } : a
+        ),
+      })),
+    }
+  })
+}
+
+function mapTripsUpdateTrip(
+  trips: Trip[],
+  tripId: number,
+  updater: (t: Trip) => Trip
+): Trip[] {
+  return trips.map(t => (t.id === tripId ? updater(t) : t))
+}
+
+function mapTripsUpdateDay(
+  trips: Trip[],
+  tripId: number,
+  dayId: number,
+  updater: (d: Day) => Day
+): Trip[] {
+  return trips.map(trip =>
+    trip.id !== tripId
+      ? trip
+      : {
+          ...trip,
+          days: trip.days.map(d => (d.id === dayId ? updater(d) : d)),
+        }
+  )
+}
+
+function mapTripsSortActivitiesInDay(
+  trips: Trip[],
+  tripId: number,
+  dayId: number
+): Trip[] {
+  return mapTripsUpdateDay(trips, tripId, dayId, d => ({
+    ...d,
+    activities: sortedActivitiesCopy(d.activities),
+  }))
+}
+
 export const useTripsStore = defineStore('trips', {
   state: (): {
     trips: Trip[]
+    /** Solo carga inicial / recarga de lista (GET /trips). */
     isLoading: boolean
+    /** Jobs en cola ejecutando fetch (para indicador opcional). */
+    syncPendingCount: number
+    /** Crear viaje (formulario dashboard). */
+    isCreatingTrip: boolean
     errorMessage: string | null
     successMessage: string | null
-    /** Tras el primer `loadTrips` terminado (éxito o error); evita skeleton en recargas con datos en memoria. */
     initialLoadDone: boolean
   } => ({
     trips: [],
     isLoading: false,
+    syncPendingCount: 0,
+    isCreatingTrip: false,
     errorMessage: null,
     successMessage: null,
     initialLoadDone: false,
   }),
 
   getters: {
-    totalTrips: (state) => state.trips.length
+    totalTrips: (state) => state.trips.length,
+    /** Solo el primer fetch de viajes; no bloquea la UI por mutaciones en cola. */
+    isBootstrapping: (state) => !state.initialLoadDone && state.isLoading,
   },
 
   actions: {
     setLoading(value: boolean) {
       this.isLoading = value
+    },
+
+    beginSync() {
+      this.syncPendingCount++
+    },
+
+    endSync() {
+      this.syncPendingCount = Math.max(0, this.syncPendingCount - 1)
     },
 
     clearError() {
@@ -108,20 +216,14 @@ export const useTripsStore = defineStore('trips', {
         ...trip,
         days: (trip.days || []).map(d => ({
           ...d,
-          activities: d.activities || [],
+          activities: (d.activities || []).map(a => ({
+            ...a,
+            completed: !!(a.completed ?? false),
+          })),
           transports: d.transports || [],
           stays: d.stays || [],
         })),
       }
-    },
-
-    sortDayActivities(day: Day) {
-      day.activities.sort((a, b) => {
-        const t1 = a.start_time || ''
-        const t2 = b.start_time || ''
-        if (t1 !== t2) return t1.localeCompare(t2)
-        return (a.order ?? 0) - (b.order ?? 0)
-      })
     },
 
     async loadTrips() {
@@ -145,83 +247,254 @@ export const useTripsStore = defineStore('trips', {
       description = '',
       start_date: string,
       end_date: string
-    ) {
-      await this.runRequest('No se pudo crear el viaje.', 'Viaje creado correctamente.', async () => {
-        const payload = {
-          name: (name ?? '').trim(),
-          description: (description ?? '').trim(),
-          start_date: toTripApiDate(start_date ?? ''),
-          end_date: toTripApiDate(end_date ?? ''),
+    ): Promise<void> {
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          store.isCreatingTrip = true
+          store.clearError()
+          store.clearSuccess()
+          try {
+            const payload = {
+              name: (name ?? '').trim(),
+              description: (description ?? '').trim(),
+              start_date: toTripApiDate(start_date ?? ''),
+              end_date: toTripApiDate(end_date ?? ''),
+            }
+            const res = await api.post('/trips', payload)
+            const raw = res.data.data as Trip
+            store.trips = [...store.trips, store.normalizeTripDays(raw)]
+            store.successMessage = 'Viaje creado correctamente.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.setError(error, 'No se pudo crear el viaje.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.isCreatingTrip = false
+            store.endSync()
+          }
+        })
+      })
+    },
+
+    updateTripName(tripId: number, newName: string) {
+      const trip = this.trips.find(t => t.id === tripId)
+      if (!trip) return
+
+      const trimmed = newName.trim()
+      if (!trimmed) return
+
+      const prevName = trip.name
+      const prevDesc = trip.description ?? ''
+
+      this.trips = mapTripsUpdateTrip(this.trips, tripId, t => ({
+        ...t,
+        name: trimmed,
+      }))
+
+      const store = this
+      enqueueRequest(async () => {
+        store.beginSync()
+        try {
+          await api.put(`/trips/${tripId}`, {
+            name: trimmed,
+            description: prevDesc,
+          })
+          store.successMessage = 'Viaje actualizado.'
+          scheduleMessageAutoClear(store)
+        } catch (error) {
+          store.trips = mapTripsUpdateTrip(store.trips, tripId, t => ({
+            ...t,
+            name: prevName,
+          }))
+          store.setError(error, 'No se pudo actualizar el viaje.')
+          scheduleMessageAutoClear(store)
+          throw error
+        } finally {
+          store.endSync()
         }
-        const res = await api.post('/trips', payload)
-
-        const raw = res.data.data as Trip
-        this.trips.push(this.normalizeTripDays(raw))
       })
     },
 
-    async updateTripName(tripId: number, newName: string) {
-      const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
+    async removeTrip(tripId: number): Promise<void> {
+      const snapshot = this.trips.find(t => t.id === tripId)
+      if (!snapshot) return
 
-      await this.runRequest('No se pudo actualizar el viaje.', 'Viaje actualizado.', async () => {
-        await api.put(`/trips/${tripId}`, {
-          name: newName,
-          description: trip.description ?? '',
-        })
+      this.trips = this.trips.filter(t => t.id !== tripId)
 
-        trip.name = newName
-      })
-    },
-
-    async removeTrip(tripId: number) {
-      await this.runRequest('No se pudo eliminar el viaje.', 'Viaje eliminado.', async () => {
-        await api.delete(`/trips/${tripId}`)
-        this.trips = this.trips.filter(t => t.id !== tripId)
-      })
-    },
-
-    async addDayToTrip(tripId: number, title: string) {
-      const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
-
-      await this.runRequest('No se pudo crear el día.', 'Día creado correctamente.', async () => {
-        const res = await api.post(`/trips/${tripId}/days`, {
-          title
-        })
-
-        trip.days.push({
-          ...res.data.data,
-          activities: res.data.data.activities || [],
-          transports: res.data.data.transports || [],
-          stays: res.data.data.stays || [],
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            await api.delete(`/trips/${tripId}`)
+            store.successMessage = 'Viaje eliminado.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.trips = [...store.trips, snapshot].sort((a, b) => a.id - b.id)
+            store.setError(error, 'No se pudo eliminar el viaje.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
         })
       })
     },
 
-    async updateDay(tripId: number, dayId: number, newTitle: string) {
-      const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
+    async addDayToTrip(tripId: number, title: string): Promise<void> {
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            const res = await api.post(`/trips/${tripId}/days`, { title })
+            const day = res.data.data as Day
+            store.trips = mapTripsUpdateTrip(store.trips, tripId, t => ({
+              ...t,
+              days: [
+                ...t.days,
+                {
+                  ...day,
+                  activities: day.activities || [],
+                  transports: day.transports || [],
+                  stays: day.stays || [],
+                },
+              ],
+            }))
+            store.successMessage = 'Día creado correctamente.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.setError(error, 'No se pudo crear el día.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
+        })
+      })
+    },
 
-      const day = trip.days.find(d => d.id === dayId)
+    updateDay(tripId: number, dayId: number, newTitle: string) {
+      const trip = this.trips.find(t => t.id === tripId)
+      const day = trip?.days.find(d => d.id === dayId)
       if (!day) return
 
-      await this.runRequest('No se pudo actualizar el día.', 'Día actualizado.', async () => {
-        await api.put(`/days/${dayId}`, {
-          title: newTitle
-        })
+      const trimmed = newTitle.trim()
+      if (!trimmed) return
 
-        day.title = newTitle
+      const previousTitle = day.title
+
+      this.trips = mapTripsUpdateDay(this.trips, tripId, dayId, d => ({
+        ...d,
+        title: trimmed,
+      }))
+
+      const store = this
+      enqueueRequest(async () => {
+        store.beginSync()
+        try {
+          const res = await api.put(`/days/${dayId}`, { title: trimmed })
+          const updated = res.data.data as Day
+          store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+            ...d,
+            title: (updated.title ?? trimmed).trim(),
+            order: updated.order ?? d.order,
+          }))
+          store.successMessage = 'Día actualizado.'
+          scheduleMessageAutoClear(store)
+        } catch (error) {
+          store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+            ...d,
+            title: previousTitle,
+          }))
+          store.setError(error, 'No se pudo actualizar el día.')
+          scheduleMessageAutoClear(store)
+          throw error
+        } finally {
+          store.endSync()
+        }
       })
     },
 
-    async removeDay(tripId: number, dayId: number) {
+    async removeDay(tripId: number, dayId: number): Promise<void> {
       const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
+      const snapshot = trip?.days.find(d => d.id === dayId)
+      if (!snapshot) return
 
-      await this.runRequest('No se pudo eliminar el día.', 'Día eliminado.', async () => {
-        await api.delete(`/days/${dayId}`)
-        trip.days = trip.days.filter(d => d.id !== dayId)
+      this.trips = mapTripsUpdateTrip(this.trips, tripId, t => ({
+        ...t,
+        days: t.days.filter(d => d.id !== dayId),
+      }))
+
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            await api.delete(`/days/${dayId}`)
+            store.successMessage = 'Día eliminado.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.trips = mapTripsUpdateTrip(store.trips, tripId, t => ({
+              ...t,
+              days: [...t.days, snapshot].sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id)),
+            }))
+            store.setError(error, 'No se pudo eliminar el día.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
+        })
+      })
+    },
+
+    /** Marca actividad completada o pendiente (PUT `/activities/{id}`). */
+    toggleActivity(activityId: number, completed: boolean) {
+      let previousCompleted = false
+      outer: for (const t of this.trips) {
+        for (const d of t.days) {
+          const a = d.activities.find(x => x.id === activityId)
+          if (a) {
+            previousCompleted = !!(a.completed ?? false)
+            break outer
+          }
+        }
+      }
+
+      this.trips = mapTripsPatchActivity(this.trips, activityId, { completed })
+      this.clearError()
+
+      const store = this
+      enqueueRequest(async () => {
+        store.beginSync()
+        try {
+          const res = await api.put(`/activities/${activityId}`, { completed })
+          const updated = res.data.data as Activity
+          store.trips = mapTripsPatchActivity(store.trips, activityId, {
+            completed: !!(updated.completed ?? completed),
+          })
+        } catch (error) {
+          store.trips = mapTripsPatchActivity(store.trips, activityId, {
+            completed: previousCompleted,
+          })
+          store.setError(error, 'No se pudo actualizar la actividad.')
+          scheduleMessageAutoClear(store)
+          throw error
+        } finally {
+          store.endSync()
+        }
       })
     },
 
@@ -229,90 +502,189 @@ export const useTripsStore = defineStore('trips', {
       tripId: number,
       dayId: number,
       payload: { title: string; start_time: string; end_time?: string | null }
-    ) {
-      const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
+    ): Promise<void> {
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            const body: Record<string, unknown> = {
+              title: payload.title,
+              start_time: payload.start_time,
+            }
+            if (payload.end_time != null && String(payload.end_time).trim() !== '') {
+              body.end_time = payload.end_time
+            }
 
-      const day = trip.days.find(d => d.id === dayId)
-      if (!day) return
+            const res = await api.post(`/days/${dayId}/activities`, body)
+            const created = res.data.data as Activity
 
-      await this.runRequest('No se pudo crear la actividad.', 'Actividad creada correctamente.', async () => {
-        const body: Record<string, unknown> = {
-          title: payload.title,
-          start_time: payload.start_time,
-        }
-        if (payload.end_time != null && String(payload.end_time).trim() !== '') {
-          body.end_time = payload.end_time
-        }
+            store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+              ...d,
+              activities: sortedActivitiesCopy([
+                ...d.activities,
+                {
+                  ...created,
+                  completed: !!(created.completed ?? false),
+                },
+              ]),
+            }))
 
-        const res = await api.post(`/days/${dayId}/activities`, body)
-
-        day.activities.push(res.data.data)
-        this.sortDayActivities(day)
+            store.successMessage = 'Actividad creada correctamente.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.setError(error, 'No se pudo crear la actividad.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
+        })
       })
     },
 
-    async updateActivity(
+    updateActivity(
       tripId: number,
       dayId: number,
       activityId: number,
       payload: { title: string; start_time: string; end_time?: string | null }
     ) {
       const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
-
-      const day = trip.days.find(d => d.id === dayId)
-      if (!day) return
-
-      const activity = day.activities.find(a => a.id === activityId)
+      const day = trip?.days.find(d => d.id === dayId)
+      const activity = day?.activities.find(a => a.id === activityId)
       if (!activity) return
 
-      await this.runRequest('No se pudo actualizar la actividad.', 'Actividad actualizada.', async () => {
-        await api.put(`/activities/${activityId}`, {
-          title: payload.title,
-          start_time: payload.start_time,
-          end_time:
-            payload.end_time != null && String(payload.end_time).trim() !== ''
-              ? payload.end_time
-              : null,
+      const nextEnd =
+        payload.end_time != null && String(payload.end_time).trim() !== ''
+          ? payload.end_time
+          : null
+
+      const snapshot: Pick<Activity, 'title' | 'start_time' | 'end_time'> = {
+        title: activity.title,
+        start_time: activity.start_time,
+        end_time: activity.end_time ?? null,
+      }
+
+      this.trips = mapTripsPatchActivity(this.trips, activityId, {
+        title: payload.title,
+        start_time: payload.start_time,
+        end_time: nextEnd,
+      })
+      this.trips = mapTripsSortActivitiesInDay(this.trips, tripId, dayId)
+
+      const store = this
+      enqueueRequest(async () => {
+        store.beginSync()
+        try {
+          const res = await api.put(`/activities/${activityId}`, {
+            title: payload.title,
+            start_time: payload.start_time,
+            end_time: nextEnd,
+          })
+          const updated = res.data.data as Activity
+          store.trips = mapTripsPatchActivity(store.trips, activityId, {
+            title: updated.title,
+            start_time: updated.start_time,
+            end_time: updated.end_time ?? null,
+            completed: !!(updated.completed ?? false),
+          })
+          store.trips = mapTripsSortActivitiesInDay(store.trips, tripId, dayId)
+          store.successMessage = 'Actividad actualizada.'
+          scheduleMessageAutoClear(store)
+        } catch (error) {
+          store.trips = mapTripsPatchActivity(store.trips, activityId, {
+            title: snapshot.title,
+            start_time: snapshot.start_time,
+            end_time: snapshot.end_time,
+          })
+          store.trips = mapTripsSortActivitiesInDay(store.trips, tripId, dayId)
+          store.setError(error, 'No se pudo actualizar la actividad.')
+          scheduleMessageAutoClear(store)
+          throw error
+        } finally {
+          store.endSync()
+        }
+      })
+    },
+
+    async removeActivity(
+      tripId: number,
+      dayId: number,
+      activityId: number
+    ): Promise<void> {
+      const trip = this.trips.find(t => t.id === tripId)
+      const day = trip?.days.find(d => d.id === dayId)
+      const snapshot = day?.activities.find(a => a.id === activityId)
+      if (!snapshot) return
+
+      this.trips = mapTripsUpdateDay(this.trips, tripId, dayId, d => ({
+        ...d,
+        activities: d.activities.filter(a => a.id !== activityId),
+      }))
+
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            await api.delete(`/activities/${activityId}`)
+            store.successMessage = 'Actividad eliminada.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+              ...d,
+              activities: sortedActivitiesCopy([...d.activities, { ...snapshot }]),
+            }))
+            store.setError(error, 'No se pudo eliminar la actividad.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
         })
-
-        activity.title = payload.title
-        activity.start_time = payload.start_time
-        activity.end_time =
-          payload.end_time != null && String(payload.end_time).trim() !== ''
-            ? payload.end_time
-            : null
-        this.sortDayActivities(day)
       })
     },
 
-    async removeActivity(tripId: number, dayId: number, activityId: number) {
+    async clearDayActivities(tripId: number, dayId: number): Promise<void> {
       const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
-
-      const day = trip.days.find(d => d.id === dayId)
-      if (!day) return
-
-      await this.runRequest('No se pudo eliminar la actividad.', 'Actividad eliminada.', async () => {
-        await api.delete(`/activities/${activityId}`)
-        day.activities = day.activities.filter(a => a.id !== activityId)
-      })
-    },
-
-    /** Elimina todas las actividades del día (transportes y estancias no se tocan). */
-    async clearDayActivities(tripId: number, dayId: number) {
-      const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
-
-      const day = trip.days.find(d => d.id === dayId)
+      const day = trip?.days.find(d => d.id === dayId)
       if (!day || !day.activities.length) return
 
-      await this.runRequest('No se pudo vaciar el día.', 'Actividades eliminadas.', async () => {
-        for (const a of [...day.activities]) {
-          await api.delete(`/activities/${a.id}`)
-        }
-        day.activities = []
+      const previousActivities = [...day.activities]
+
+      this.trips = mapTripsUpdateDay(this.trips, tripId, dayId, d => ({
+        ...d,
+        activities: [],
+      }))
+
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            for (const a of previousActivities) {
+              await api.delete(`/activities/${a.id}`)
+            }
+            store.successMessage = 'Actividades eliminadas.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+              ...d,
+              activities: sortedActivitiesCopy([...previousActivities]),
+            }))
+            store.setError(error, 'No se pudo vaciar el día.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
+        })
       })
     },
 
@@ -320,36 +692,73 @@ export const useTripsStore = defineStore('trips', {
       tripId: number,
       dayId: number,
       payload: { from: string; to: string; type: string; duration?: string; notes?: string }
-    ) {
-      const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
+    ): Promise<void> {
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            const res = await api.post(`/days/${dayId}/transports`, {
+              from: payload.from,
+              to: payload.to,
+              type: payload.type,
+              duration: payload.duration?.trim() || undefined,
+              notes: payload.notes?.trim() || undefined,
+            })
 
-      const day = trip.days.find(d => d.id === dayId)
-      if (!day) return
-
-      await this.runRequest('No se pudo añadir el transporte.', 'Transporte añadido.', async () => {
-        const res = await api.post(`/days/${dayId}/transports`, {
-          from: payload.from,
-          to: payload.to,
-          type: payload.type,
-          duration: payload.duration?.trim() || undefined,
-          notes: payload.notes?.trim() || undefined,
+            const row = res.data.data as Transport
+            store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+              ...d,
+              transports: [...d.transports, row],
+            }))
+            store.successMessage = 'Transporte añadido.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.setError(error, 'No se pudo añadir el transporte.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
         })
-
-        day.transports.push(res.data.data)
       })
     },
 
-    async removeTransport(tripId: number, dayId: number, transportId: number) {
+    async removeTransport(tripId: number, dayId: number, transportId: number): Promise<void> {
       const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
+      const day = trip?.days.find(d => d.id === dayId)
+      const snapshot = day?.transports.find(t => t.id === transportId)
+      if (!snapshot) return
 
-      const day = trip.days.find(d => d.id === dayId)
-      if (!day) return
+      this.trips = mapTripsUpdateDay(this.trips, tripId, dayId, d => ({
+        ...d,
+        transports: d.transports.filter(t => t.id !== transportId),
+      }))
 
-      await this.runRequest('No se pudo eliminar el transporte.', 'Transporte eliminado.', async () => {
-        await api.delete(`/transports/${transportId}`)
-        day.transports = day.transports.filter(t => t.id !== transportId)
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            await api.delete(`/transports/${transportId}`)
+            store.successMessage = 'Transporte eliminado.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+              ...d,
+              transports: [...d.transports, snapshot],
+            }))
+            store.setError(error, 'No se pudo eliminar el transporte.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
+        })
       })
     },
 
@@ -357,39 +766,76 @@ export const useTripsStore = defineStore('trips', {
       tripId: number,
       dayId: number,
       payload: { name: string; location: string; check_in?: string; check_out?: string; notes?: string }
-    ) {
-      const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
+    ): Promise<void> {
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            const body: Record<string, unknown> = {
+              name: payload.name,
+              location: payload.location,
+            }
+            if (payload.check_in?.trim()) body.check_in = payload.check_in
+            if (payload.check_out?.trim()) body.check_out = payload.check_out
+            if (payload.notes?.trim()) body.notes = payload.notes
 
-      const day = trip.days.find(d => d.id === dayId)
-      if (!day) return
+            const res = await api.post(`/days/${dayId}/stays`, body)
+            const row = res.data.data as Stay
 
-      await this.runRequest('No se pudo añadir la estancia.', 'Estancia añadida.', async () => {
-        const body: Record<string, unknown> = {
-          name: payload.name,
-          location: payload.location,
-        }
-        if (payload.check_in?.trim()) body.check_in = payload.check_in
-        if (payload.check_out?.trim()) body.check_out = payload.check_out
-        if (payload.notes?.trim()) body.notes = payload.notes
-
-        const res = await api.post(`/days/${dayId}/stays`, body)
-
-        day.stays.push(res.data.data)
+            store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+              ...d,
+              stays: [...d.stays, row],
+            }))
+            store.successMessage = 'Estancia añadida.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.setError(error, 'No se pudo añadir la estancia.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
+        })
       })
     },
 
-    async removeStay(tripId: number, dayId: number, stayId: number) {
+    async removeStay(tripId: number, dayId: number, stayId: number): Promise<void> {
       const trip = this.trips.find(t => t.id === tripId)
-      if (!trip) return
+      const day = trip?.days.find(d => d.id === dayId)
+      const snapshot = day?.stays.find(s => s.id === stayId)
+      if (!snapshot) return
 
-      const day = trip.days.find(d => d.id === dayId)
-      if (!day) return
+      this.trips = mapTripsUpdateDay(this.trips, tripId, dayId, d => ({
+        ...d,
+        stays: d.stays.filter(s => s.id !== stayId),
+      }))
 
-      await this.runRequest('No se pudo eliminar la estancia.', 'Estancia eliminada.', async () => {
-        await api.delete(`/stays/${stayId}`)
-        day.stays = day.stays.filter(s => s.id !== stayId)
+      const store = this
+      return new Promise((resolve, reject) => {
+        enqueueRequest(async () => {
+          store.beginSync()
+          try {
+            await api.delete(`/stays/${stayId}`)
+            store.successMessage = 'Estancia eliminada.'
+            scheduleMessageAutoClear(store)
+            resolve()
+          } catch (error) {
+            store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+              ...d,
+              stays: [...d.stays, snapshot],
+            }))
+            store.setError(error, 'No se pudo eliminar la estancia.')
+            scheduleMessageAutoClear(store)
+            reject(error)
+            throw error
+          } finally {
+            store.endSync()
+          }
+        })
       })
-    }
-  }
+    },
+  },
 })

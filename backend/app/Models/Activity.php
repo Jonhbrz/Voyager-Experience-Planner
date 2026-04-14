@@ -13,6 +13,7 @@ class Activity extends Model
         'order',
         'start_time',
         'end_time',
+        'completed',
     ];
 
     protected function casts(): array
@@ -20,6 +21,7 @@ class Activity extends Model
         return [
             'start_time' => 'datetime:H:i',
             'end_time' => 'datetime:H:i',
+            'completed' => 'boolean',
         ];
     }
 

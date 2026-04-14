@@ -2,9 +2,7 @@
 
 namespace App\Http\Requests;
 
-use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Validator;
 
 class StoreActivityRequest extends FormRequest
 {
@@ -28,21 +26,7 @@ class StoreActivityRequest extends FormRequest
             'order' => 'sometimes|required|integer|min:0',
             'start_time' => 'required|date_format:H:i',
             'end_time' => 'nullable|date_format:H:i',
+            'completed' => 'sometimes|boolean',
         ];
-    }
-
-    public function withValidator(Validator $validator): void
-    {
-        $validator->after(function (Validator $validator): void {
-            $start = $this->input('start_time');
-            $end = $this->input('end_time');
-            if ($start && $end) {
-                $s = Carbon::parse('2000-01-01 '.$start);
-                $e = Carbon::parse('2000-01-01 '.$end);
-                if (! $e->gt($s)) {
-                    $validator->errors()->add('end_time', 'La hora de fin debe ser posterior a la de inicio.');
-                }
-            }
-        });
     }
 }

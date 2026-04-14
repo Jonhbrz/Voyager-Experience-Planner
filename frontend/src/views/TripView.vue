@@ -2,7 +2,7 @@
   <MainLayout>
 
     <div
-      v-if="!tripsStore.initialLoadDone && tripsStore.isLoading && !trip"
+      v-if="tripsStore.isBootstrapping && !trip"
       class="trip-page-skeleton"
       aria-busy="true"
       aria-label="Cargando viaje"
@@ -24,8 +24,10 @@
       </div>
     </div>
 
-    <div v-else-if="trip" class="trip-root" :aria-busy="tripsStore.isLoading">
-      <p v-if="tripsStore.isLoading" class="loading" role="status">Guardando cambios...</p>
+    <div v-else-if="trip" class="trip-root" :aria-busy="tripsStore.syncPendingCount > 0">
+      <p v-if="tripsStore.syncPendingCount > 0" class="loading loading--sync" role="status">
+        Sincronizando…
+      </p>
 
       <div class="trip-page-header section">
         <div class="trip-header card-hover">
@@ -38,11 +40,31 @@
               </p>
               <p v-if="tripDateRange" class="trip-date-range">{{ tripDateRange }}</p>
               <p v-if="trip.description?.trim()" class="trip-desc-readonly">{{ trip.description }}</p>
+              <div
+                v-if="tripHasActivities"
+                class="trip-progress-block"
+                role="group"
+                aria-label="Progreso del itinerario"
+              >
+                <div class="trip-progress-head">
+                  <span>Progreso del viaje</span>
+                  <span class="trip-progress-value">{{ tripProgressPercent }}%</span>
+                </div>
+                <div
+                  class="trip-progress-bar trip-progress-bar--header"
+                  role="progressbar"
+                  :aria-valuenow="tripProgressPercent"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                >
+                  <div class="trip-progress-fill" :style="{ width: `${tripProgressPercent}%` }" />
+                </div>
+              </div>
             </div>
             <div class="actions">
               <button
                 type="button"
-                :disabled="tripsStore.isLoading"
+                :disabled="tripsStore.isBootstrapping"
                 aria-label="Editar nombre del viaje"
                 @click="startEditTrip"
               >
@@ -50,7 +72,7 @@
               </button>
               <button
                 type="button"
-                :disabled="tripsStore.isLoading"
+                :disabled="tripsStore.isBootstrapping"
                 aria-label="Eliminar viaje"
                 @click="deleteTrip"
               >
@@ -60,17 +82,17 @@
           </div>
 
           <form v-else class="trip-edit-name-form" @submit.prevent="saveTripEdit">
-            <input v-model="editTripName" placeholder="Nombre del viaje" :disabled="tripsStore.isLoading" />
+            <input v-model="editTripName" placeholder="Nombre del viaje" :disabled="tripsStore.isBootstrapping" />
             <button
               type="submit"
-              :disabled="tripsStore.isLoading || !editTripName.trim()"
+              :disabled="tripsStore.isBootstrapping || !editTripName.trim()"
               aria-label="Guardar nombre del viaje"
             >
               Guardar
             </button>
             <button
               type="button"
-              :disabled="tripsStore.isLoading"
+              :disabled="tripsStore.isBootstrapping"
               aria-label="Cancelar edición del viaje"
               @click="cancelTripEdit"
             >
@@ -85,7 +107,7 @@
         <button
           type="button"
           class="primary"
-          :disabled="tripsStore.isLoading"
+          :disabled="tripsStore.isBootstrapping"
           aria-label="Añadir un día al viaje"
           @click="showForm = !showForm"
         >
@@ -93,15 +115,15 @@
         </button>
 
         <form v-if="showForm" class="form add-day-form" @submit.prevent="addDay">
-          <input v-model="newDayTitle" placeholder="Nombre del día" :disabled="tripsStore.isLoading" />
+          <input v-model="newDayTitle" placeholder="Nombre del día" :disabled="tripsStore.isBootstrapping" />
           <button
             type="submit"
-            :disabled="tripsStore.isLoading || !newDayTitle.trim()"
+            :disabled="tripsStore.isBootstrapping || !newDayTitle.trim()"
             aria-label="Guardar nuevo día"
           >
             Guardar
           </button>
-          <button type="button" :disabled="tripsStore.isLoading" aria-label="Cancelar nuevo día" @click="cancelAddDay">
+          <button type="button" :disabled="tripsStore.isBootstrapping" aria-label="Cancelar nuevo día" @click="cancelAddDay">
             Cancelar
           </button>
         </form>
@@ -150,7 +172,7 @@
               <div class="actions">
                 <button
                   type="button"
-                  :disabled="tripsStore.isLoading"
+                  :disabled="tripsStore.isBootstrapping"
                   aria-label="Editar día"
                   @click.stop="startEditDay(day)"
                 >
@@ -158,7 +180,7 @@
                 </button>
                 <button
                   type="button"
-                  :disabled="tripsStore.isLoading"
+                  :disabled="tripsStore.isBootstrapping"
                   aria-label="Eliminar día"
                   @click.stop="deleteDay(day.id)"
                 >
@@ -168,13 +190,13 @@
             </div>
 
             <form v-else class="day-edit-form" @submit.prevent="saveEditDay(day.id)">
-              <input v-model="editTitle" placeholder="Nombre del día" :disabled="tripsStore.isLoading" />
-              <button type="submit" :disabled="tripsStore.isLoading || !editTitle.trim()" aria-label="Guardar nombre del día">
+              <input v-model="editTitle" placeholder="Nombre del día" :disabled="tripsStore.isBootstrapping" />
+              <button type="submit" :disabled="tripsStore.isBootstrapping || !editTitle.trim()" aria-label="Guardar nombre del día">
                 Guardar
               </button>
               <button
                 type="button"
-                :disabled="tripsStore.isLoading"
+                :disabled="tripsStore.isBootstrapping"
                 aria-label="Cancelar edición del día"
                 @click="cancelEditDay"
               >
@@ -197,7 +219,7 @@
                         v-if="(day.activities || []).length"
                         type="button"
                         class="clear-day-btn"
-                        :disabled="tripsStore.isLoading"
+                        :disabled="tripsStore.isBootstrapping"
                         aria-label="Eliminar todas las actividades del día"
                         @click.stop="onClearDayActivities(day.id)"
                       >
@@ -227,7 +249,10 @@
                         <template #item="{ element: activity, index: actIndex }">
                           <div
                             class="timeline-item"
-                            :class="{ 'timeline-item--flash': flashActivityId === activity.id }"
+                            :class="{
+                              'timeline-item--flash': flashActivityId === activity.id,
+                              'timeline-item--completed': !!(activity.completed ?? false),
+                            }"
                             :key="activity.id"
                           >
                               <div class="timeline-axis activity-drag-handle" title="Arrastrar para reordenar">
@@ -243,6 +268,24 @@
                                 :class="{ 'timeline-panel--editing': editingActivityId === activity.id }"
                               >
                                 <div v-if="editingActivityId !== activity.id" class="timeline-row">
+                                  <label class="activity-done-label" @click.stop>
+                                    <input
+                                      type="checkbox"
+                                      :checked="!!(activity.completed ?? false)"
+                                      :disabled="tripsStore.isBootstrapping"
+                                      :aria-label="
+                                        (activity.completed ?? false)
+                                          ? 'Marcar actividad como pendiente'
+                                          : 'Marcar actividad como completada'
+                                      "
+                                      @change="
+                                        onToggleActivityCompleted(
+                                          activity.id,
+                                          ($event.target as HTMLInputElement).checked
+                                        )
+                                      "
+                                    />
+                                  </label>
                                   <div
                                     class="timeline-main timeline-main--clickable"
                                     role="button"
@@ -276,7 +319,7 @@
                                   <div class="timeline-actions">
                                     <button
                                       type="button"
-                                      :disabled="tripsStore.isLoading"
+                                      :disabled="tripsStore.isBootstrapping"
                                       aria-label="Editar actividad"
                                       title="Editar"
                                       @click.stop="startEditActivity(day.id, activity)"
@@ -285,7 +328,7 @@
                                     </button>
                                     <button
                                       type="button"
-                                      :disabled="tripsStore.isLoading"
+                                      :disabled="tripsStore.isBootstrapping"
                                       aria-label="Eliminar actividad"
                                       @click.stop="deleteActivity(day.id, activity.id)"
                                     >
@@ -302,27 +345,27 @@
                                   <input
                                     v-model="editActivityTitle"
                                     placeholder="Nombre"
-                                    :disabled="tripsStore.isLoading"
+                                    :disabled="tripsStore.isBootstrapping"
                                     @keydown.esc.prevent="cancelEditActivity"
                                   />
                                   <input
                                     v-model="editActivityStart"
                                     type="time"
-                                    :disabled="tripsStore.isLoading"
+                                    :disabled="tripsStore.isBootstrapping"
                                     @keydown.esc.prevent="cancelEditActivity"
                                   />
                                   <input
                                     v-model="editActivityEnd"
                                     type="time"
-                                    :disabled="tripsStore.isLoading"
+                                    :disabled="tripsStore.isBootstrapping"
                                     @keydown.esc.prevent="cancelEditActivity"
                                   />
-                                  <button type="submit" :disabled="tripsStore.isLoading || !editActivityTitle.trim()" aria-label="Guardar actividad">
+                                  <button type="submit" :disabled="tripsStore.isBootstrapping || !editActivityTitle.trim()" aria-label="Guardar actividad">
                                     Guardar
                                   </button>
                                   <button
                                     type="button"
-                                    :disabled="tripsStore.isLoading"
+                                    :disabled="tripsStore.isBootstrapping"
                                     aria-label="Cancelar edición de actividad"
                                     @click="cancelEditActivity"
                                   >
@@ -338,7 +381,7 @@
                     <button
                       type="button"
                       class="quick-add-activity-btn"
-                      :disabled="tripsStore.isLoading"
+                      :disabled="tripsStore.isBootstrapping"
                       aria-label="Añadir actividad al día"
                       @click="toggleQuickAdd(day.id)"
                     >
@@ -354,7 +397,7 @@
                         v-model="activityNew(day.id).start_time"
                         class="quick-add-time"
                         type="time"
-                        :disabled="tripsStore.isLoading"
+                        :disabled="tripsStore.isBootstrapping"
                         @keydown.esc.prevent="closeQuickAdd(day.id)"
                       />
                       <input
@@ -363,13 +406,13 @@
                         class="quick-add-title"
                         type="text"
                         placeholder="Actividad"
-                        :disabled="tripsStore.isLoading"
+                        :disabled="tripsStore.isBootstrapping"
                         @keydown.esc.prevent="closeQuickAdd(day.id)"
                       />
                       <button
                         type="submit"
                         class="quick-add-save"
-                        :disabled="tripsStore.isLoading || !activityNew(day.id).title.trim()"
+                        :disabled="tripsStore.isBootstrapping || !activityNew(day.id).title.trim()"
                         aria-label="Guardar nueva actividad"
                       >
                         Añadir
@@ -384,22 +427,22 @@
                       <input
                         v-model="transportDraft(day.id).from"
                         placeholder="Desde"
-                        :disabled="tripsStore.isLoading"
+                        :disabled="tripsStore.isBootstrapping"
                       />
                       <span class="transport-arrow">→</span>
                       <input
                         v-model="transportDraft(day.id).to"
                         placeholder="Hasta"
-                        :disabled="tripsStore.isLoading"
+                        :disabled="tripsStore.isBootstrapping"
                       />
                       <input
                         v-model="transportDraft(day.id).type"
                         placeholder="Tipo (coche, tren…)"
-                        :disabled="tripsStore.isLoading"
+                        :disabled="tripsStore.isBootstrapping"
                       />
                       <button
                         type="submit"
-                        :disabled="tripsStore.isLoading || !canAddTransport(day.id)"
+                        :disabled="tripsStore.isBootstrapping || !canAddTransport(day.id)"
                         aria-label="Añadir transporte"
                       >
                         Añadir
@@ -437,7 +480,7 @@
                         </span>
                         <button
                           type="button"
-                          :disabled="tripsStore.isLoading"
+                          :disabled="tripsStore.isBootstrapping"
                           class="linkish"
                           aria-label="Eliminar transporte"
                           @click="removeTransportRow(day.id, t.id)"
@@ -455,16 +498,16 @@
                       <input
                         v-model="stayDraft(day.id).name"
                         placeholder="Hotel / Airbnb"
-                        :disabled="tripsStore.isLoading"
+                        :disabled="tripsStore.isBootstrapping"
                       />
                       <input
                         v-model="stayDraft(day.id).location"
                         placeholder="Ubicación"
-                        :disabled="tripsStore.isLoading"
+                        :disabled="tripsStore.isBootstrapping"
                       />
                       <button
                         type="submit"
-                        :disabled="tripsStore.isLoading || !canAddStay(day.id)"
+                        :disabled="tripsStore.isBootstrapping || !canAddStay(day.id)"
                         aria-label="Añadir estancia"
                       >
                         Añadir
@@ -492,7 +535,7 @@
                         </span>
                         <button
                           type="button"
-                          :disabled="tripsStore.isLoading"
+                          :disabled="tripsStore.isBootstrapping"
                           class="linkish"
                           aria-label="Eliminar estancia"
                           @click="removeStayRow(day.id, s.id)"
@@ -529,8 +572,9 @@
 
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useTripsStore } from '@/stores/trips'
+import { useLayoutStore } from '@/stores/layout'
 import draggable from 'vuedraggable'
 import MainLayout from '@/layouts/MainLayout.vue'
 import { googleMapsSearchUrl } from '@/utils/maps'
@@ -540,13 +584,15 @@ import {
   getDayDate,
   getTripDuration,
 } from '@/utils/tripDates'
-import { transportIcon } from '@/utils/tripUi'
+import { getTripProgress, transportIcon } from '@/utils/tripUi'
 
 import type { Trip, Day, Activity, Stay } from '@/types/trip'
 
 const route = useRoute()
 const router = useRouter()
 const tripsStore = useTripsStore()
+const layoutStore = useLayoutStore()
+const previousSidebarCollapsed = ref(layoutStore.isSidebarCollapsed)
 
 const tripId = computed(() => Number(route.params.id))
 
@@ -558,29 +604,46 @@ const tripDateRange = computed(() => (trip.value ? formatTripDateRange(trip.valu
 
 const tripDurationDays = computed(() => (trip.value ? getTripDuration(trip.value) : null))
 
+const tripProgressPercent = computed(() =>
+  trip.value ? getTripProgress(trip.value) : 0
+)
+
+const tripHasActivities = computed(() =>
+  (trip.value?.days ?? []).some(d => (d.activities ?? []).length > 0)
+)
+
 function dayHeadingLine(day: Day, index: number): string {
   const t = trip.value
   const prefix = `Día ${index + 1}`
-  if (!t?.start_date) {
-    return `${prefix} — ${day.title}`
-  }
-  const d = getDayDate(day, t)
-  if (!d) {
-    return `${prefix} — ${day.title}`
-  }
-  return `${prefix} — ${formatDayShort(d)}`
+  const title = (day.title ?? '').trim()
+  const d = t?.start_date ? getDayDate(day, t) : null
+  const datePart = d ? formatDayShort(d) : ''
+  const parts = [title, datePart].filter(Boolean)
+  const body = parts.length ? parts.join(' · ') : ''
+  return body ? `${prefix} — ${body}` : prefix
+}
+
+const onToggleActivityCompleted = (activityId: number, completed: boolean) => {
+  void tripsStore.toggleActivity(activityId, completed)
 }
 
 const onClearDayActivities = async (dayId: number) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   if (!confirm('¿Eliminar todas las actividades de este día? (no se borra el día)')) return
   await tripsStore.clearDayActivities(tripId.value, dayId)
 }
 
 onMounted(async () => {
+  previousSidebarCollapsed.value = layoutStore.isSidebarCollapsed
+  layoutStore.setSidebarCollapsed(true)
+
   if (!tripsStore.trips.length) {
     await tripsStore.loadTrips()
   }
+})
+
+onUnmounted(() => {
+  layoutStore.setSidebarCollapsed(previousSidebarCollapsed.value)
 })
 
 function stayMapQuery(s: Stay): string | null {
@@ -603,20 +666,17 @@ const editingTrip = ref(false)
 const editTripName = ref('')
 
 const startEditTrip = () => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   if (!trip.value) return
   editingTrip.value = true
   editTripName.value = trip.value.name
 }
 
-const saveTripEdit = async () => {
-  if (tripsStore.isLoading) return
+const saveTripEdit = () => {
+  if (tripsStore.isBootstrapping) return
   if (!editTripName.value.trim()) return
-  await tripsStore.updateTripName(tripId.value, editTripName.value)
-  await nextTick()
-  if (!tripsStore.errorMessage) {
-    editingTrip.value = false
-  }
+  tripsStore.updateTripName(tripId.value, editTripName.value)
+  editingTrip.value = false
 }
 
 const cancelTripEdit = () => {
@@ -624,7 +684,7 @@ const cancelTripEdit = () => {
 }
 
 const deleteTrip = async () => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   if (!confirm('¿Eliminar este viaje?')) return
   await tripsStore.removeTrip(tripId.value)
   router.push('/')
@@ -634,7 +694,7 @@ const showForm = ref(false)
 const newDayTitle = ref('')
 
 const addDay = async () => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   if (!newDayTitle.value.trim()) return
   const t = trip.value
   const beforeIds = new Set((t?.days ?? []).map((d) => d.id))
@@ -659,20 +719,17 @@ const editingDayId = ref<number | null>(null)
 const editTitle = ref('')
 
 const startEditDay = (day: Day) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   editingDayId.value = day.id
   editTitle.value = day.title
 }
 
-const saveEditDay = async (dayId: number) => {
-  if (tripsStore.isLoading) return
+const saveEditDay = (dayId: number) => {
+  if (tripsStore.isBootstrapping) return
   if (!editTitle.value.trim()) return
-  await tripsStore.updateDay(tripId.value, dayId, editTitle.value)
-  await nextTick()
-  if (!tripsStore.errorMessage) {
-    editingDayId.value = null
-    editTitle.value = ''
-  }
+  tripsStore.updateDay(tripId.value, dayId, editTitle.value)
+  editingDayId.value = null
+  editTitle.value = ''
 }
 
 const cancelEditDay = () => {
@@ -681,7 +738,7 @@ const cancelEditDay = () => {
 }
 
 const deleteDay = async (dayId: number) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   await tripsStore.removeDay(tripId.value, dayId)
 }
 
@@ -751,7 +808,7 @@ function activityNew(dayId: number) {
 }
 
 function toggleQuickAdd(dayId: number) {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   if (quickAddOpen[dayId]) {
     closeQuickAdd(dayId)
   } else {
@@ -771,7 +828,7 @@ function closeQuickAdd(dayId: number) {
 }
 
 const submitQuickAdd = async (dayId: number) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   const d = activityNew(dayId)
   if (!d.title.trim()) return
 
@@ -817,7 +874,7 @@ const editActivityEnd = ref('')
 const activityEditBackup = ref<{ title: string; start_time: string; end_time: string } | null>(null)
 
 const startEditActivity = (_dayId: number, activity: Activity) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   editingActivityId.value = activity.id
   editActivityTitle.value = activity.title
   editActivityStart.value = formatTimeForInput(activity.start_time)
@@ -830,28 +887,25 @@ const startEditActivity = (_dayId: number, activity: Activity) => {
 }
 
 const onActivityMainClick = (dayId: number, activity: Activity) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   startEditActivity(dayId, activity)
 }
 
-const saveEditActivity = async (dayId: number, activityId: number) => {
-  if (tripsStore.isLoading) return
+const saveEditActivity = (dayId: number, activityId: number) => {
+  if (tripsStore.isBootstrapping) return
   if (!editActivityTitle.value.trim()) return
 
-  await tripsStore.updateActivity(tripId.value, dayId, activityId, {
+  tripsStore.updateActivity(tripId.value, dayId, activityId, {
     title: editActivityTitle.value.trim(),
     start_time: editActivityStart.value,
     end_time: editActivityEnd.value.trim() ? editActivityEnd.value : null,
   })
 
-  await nextTick()
-  if (!tripsStore.errorMessage) {
-    editingActivityId.value = null
-    activityEditBackup.value = null
-    editActivityTitle.value = ''
-    editActivityStart.value = '09:00'
-    editActivityEnd.value = ''
-  }
+  editingActivityId.value = null
+  activityEditBackup.value = null
+  editActivityTitle.value = ''
+  editActivityStart.value = '09:00'
+  editActivityEnd.value = ''
 }
 
 const cancelEditActivity = () => {
@@ -865,7 +919,7 @@ const cancelEditActivity = () => {
 }
 
 const deleteActivity = async (dayId: number, activityId: number) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   await tripsStore.removeActivity(tripId.value, dayId, activityId)
 }
 
@@ -884,7 +938,7 @@ const canAddTransport = (dayId: number) => {
 }
 
 const submitAddTransport = async (dayId: number) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   const d = transportDraft(dayId)
   if (!canAddTransport(dayId)) return
 
@@ -900,7 +954,7 @@ const submitAddTransport = async (dayId: number) => {
 }
 
 const removeTransportRow = async (dayId: number, transportId: number) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   await tripsStore.removeTransport(tripId.value, dayId, transportId)
 }
 
@@ -919,7 +973,7 @@ const canAddStay = (dayId: number) => {
 }
 
 const submitAddStay = async (dayId: number) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   const d = stayDraft(dayId)
   if (!canAddStay(dayId)) return
 
@@ -933,7 +987,7 @@ const submitAddStay = async (dayId: number) => {
 }
 
 const removeStayRow = async (dayId: number, stayId: number) => {
-  if (tripsStore.isLoading) return
+  if (tripsStore.isBootstrapping) return
   await tripsStore.removeStay(tripId.value, dayId, stayId)
 }
 
@@ -1074,6 +1128,45 @@ const saveOrder = () => {}
   color: var(--text-light);
   font-size: 0.98rem;
   white-space: pre-wrap;
+}
+
+.trip-progress-block {
+  margin-top: 14px;
+  max-width: 22rem;
+}
+
+.trip-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-light);
+  margin-bottom: 6px;
+}
+
+.trip-progress-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+}
+
+.trip-progress-bar--header {
+  height: 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.trip-progress-bar--header .trip-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 6px;
+  transition: width 0.22s ease;
+}
+
+.loading--sync {
+  font-size: 0.9rem;
+  opacity: 0.85;
 }
 
 .section-activities-head {
@@ -1419,6 +1512,30 @@ input::placeholder {
   background: rgba(129, 199, 132, 0.12);
   border-color: #66bb6a;
   box-shadow: 0 0 0 2px rgba(102, 187, 106, 0.35);
+}
+
+.activity-done-label {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 4px 2px 0 0;
+  cursor: pointer;
+}
+
+.activity-done-label input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--primary, #2e7d32);
+}
+
+.timeline-item--completed .timeline-title,
+.timeline-item--completed .timeline-time-line {
+  opacity: 0.72;
+}
+
+.timeline-item--completed .timeline-title {
+  text-decoration: line-through;
 }
 
 .timeline-row {
@@ -1803,6 +1920,19 @@ button.linkish:hover:not(:disabled) {
     min-height: 44px;
     padding: 8px;
     font-size: 1.1rem;
+  }
+
+  .activity-done-label {
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px 0 0;
+  }
+
+  .activity-done-label input {
+    width: 1.35rem;
+    height: 1.35rem;
   }
 }
 </style>
