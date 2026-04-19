@@ -1,0 +1,956 @@
+
+.trip-root.trip-surface .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.trip-root.trip-surface .day-title-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.trip-page-skeleton {
+  max-width: 720px;
+}
+
+.trip-skel-header {
+  margin-bottom: 16px;
+  min-height: 72px;
+}
+
+.trip-skel-h1 {
+  width: 55%;
+  height: 1.5rem;
+}
+
+.trip-skel-sub {
+  width: 32%;
+  margin-top: 12px;
+  height: 0.9rem;
+}
+
+.trip-skel-desc {
+  width: 100%;
+  height: 4.5rem;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.trip-skel-day {
+  margin-bottom: 16px;
+  min-height: 140px;
+}
+
+.trip-skel-daytitle {
+  width: 45%;
+  height: 1rem;
+  margin-bottom: 14px;
+}
+
+.trip-skel-act-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trip-skel-act-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.trip-skel-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.trip-skel-act-line {
+  flex: 1;
+  height: 0.95rem;
+}
+
+.trip-not-found {
+  padding: 24px 0;
+}
+
+.trip-root.trip-surface .trip-header-view {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+}
+
+.trip-root.trip-surface .trip-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.trip-root.trip-surface .trip-duration {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.trip-root.trip-surface .trip-date-range {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-light);
+}
+
+.trip-root.trip-surface .trip-desc-readonly {
+  margin: 0;
+  max-width: 48rem;
+  line-height: 1.55;
+  color: var(--text-light);
+  font-size: 0.98rem;
+  white-space: pre-wrap;
+}
+
+.trip-root.trip-surface .trip-progress-block {
+  margin-top: 14px;
+  max-width: 22rem;
+}
+
+.trip-root.trip-surface .trip-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-light);
+  margin-bottom: 6px;
+}
+
+.trip-root.trip-surface .trip-progress-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+}
+
+.trip-root.trip-surface .trip-progress-bar--header {
+  height: 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.trip-root.trip-surface .trip-progress-bar--header .trip-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 6px;
+  transition: width 0.22s ease;
+}
+
+.trip-root.trip-surface .loading--sync {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+.trip-root.trip-surface .section-activities-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.trip-root.trip-surface .clear-day-btn {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent !important;
+  color: var(--text-light) !important;
+}
+
+.trip-root.trip-surface .clear-day-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary) !important;
+}
+
+.trip-root.trip-surface .add-day-form {
+  margin-top: 14px;
+}
+
+.trip-root.trip-surface .trip-edit-name-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.trip-root.trip-surface .trip-page-dias > h2 {
+  margin: 0 0 18px;
+  font-size: 1.2rem;
+}
+
+.trip-root.trip-surface h1 {
+  margin: 0 0 10px;
+}
+
+.trip-root.trip-surface .primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.trip-root.trip-surface .primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.trip-root.trip-surface .card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.trip-root.trip-surface .card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.trip-root.trip-surface .day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.trip-root.trip-surface .day-header-total {
+  flex-shrink: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.trip-root.trip-surface .item-price {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Precio en filas de lista (transporte/estancia): separado del texto de la misma celda */
+.trip-root.trip-surface .list-main .item-price {
+  margin-left: 10px;
+}
+
+.trip-root.trip-surface .activity-edit-price {
+  width: 6.5rem;
+  max-width: 100%;
+}
+
+.trip-root.trip-surface .transport-price-input,
+.trip-root.trip-surface .stay-price-input {
+  width: 5.5rem;
+  max-width: 100%;
+}
+
+.trip-root.trip-surface .day-drag-handle {
+  cursor: grab;
+  user-select: none;
+  color: var(--text-light);
+  padding: 4px;
+}
+
+.trip-root.trip-surface .day-drag-handle:active {
+  cursor: grabbing;
+}
+
+.trip-root.trip-surface .day-title-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  padding: 4px 0;
+}
+
+.trip-root.trip-surface .day-title-toggle:hover {
+  opacity: 0.85;
+}
+
+.trip-root.trip-surface .accordion-chevron {
+  display: inline-block;
+  transition: transform 0.18s ease;
+  color: var(--text-light);
+}
+
+.trip-root.trip-surface .accordion-chevron.open {
+  transform: rotate(90deg);
+}
+
+.trip-root.trip-surface .actions button {
+  padding: 5px 8px;
+  font-size: 14px;
+}
+
+.trip-root.trip-surface button {
+  margin-left: 6px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.trip-root.trip-surface button:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.trip-root.trip-surface .form {
+  margin-bottom: 20px;
+}
+
+.trip-root.trip-surface input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.trip-root.trip-surface input::placeholder {
+  color: var(--text-light);
+}
+
+.trip-root.trip-surface .day-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.35s ease, border-color 0.35s ease;
+}
+
+.trip-root.trip-surface .day-card--flash {
+  animation: day-open-flash 0.75s ease-out;
+}
+
+@keyframes day-open-flash {
+  0% {
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.45);
+    border-color: var(--primary);
+  }
+  100% {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    border-color: var(--border);
+  }
+}
+
+.trip-root.trip-surface .day-body-outer {
+  overflow: hidden;
+}
+
+.trip-root.trip-surface .day-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.trip-root.trip-surface .section-block {
+  margin-bottom: 18px;
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+  border: none;
+  border-left: 4px solid #ccc;
+  background: transparent;
+}
+
+.trip-root.trip-surface .section-activities {
+  border-left-color: #81c784;
+}
+
+.trip-root.trip-surface .section-transport {
+  border-left-color: #0d9488;
+}
+
+.trip-root.trip-surface .section-stay {
+  border-left-color: #ba68c8;
+}
+
+.trip-root.trip-surface .section-badge {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.trip-root.trip-surface .section-block h4 {
+  margin: 0 0 10px;
+}
+
+.trip-root.trip-surface .section-block.section-activities .section-activities-head h4 {
+  margin: 0;
+}
+
+.trip-root.trip-surface .empty-hint {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  color: var(--text-light);
+}
+
+.trip-root.trip-surface .empty-hint.muted {
+  color: var(--text-light);
+  font-size: 0.9rem;
+}
+
+.trip-root.trip-surface .activity-timeline {
+  margin-bottom: 8px;
+}
+
+.trip-root.trip-surface .timeline-draggable {
+  min-height: 0;
+  touch-action: pan-y;
+}
+
+.trip-root.trip-surface .activity-sort-ghost {
+  opacity: 0.35 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.trip-root.trip-surface .activity-sort-chosen {
+  cursor: grabbing !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.trip-root.trip-surface .timeline-item.activity-sort-chosen .timeline-panel {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.trip-root.trip-surface .activity-sort-drag {
+  opacity: 0.6 !important;
+  cursor: grabbing !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.trip-root.trip-surface .timeline-item {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 6px;
+  min-height: 3.25rem;
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+}
+
+.trip-root.trip-surface .timeline-item--flash .timeline-panel {
+  animation: activity-flash-bg 0.35s ease-out;
+}
+
+@keyframes activity-flash-bg {
+  0% {
+    background-color: rgba(129, 199, 132, 0.45);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.5);
+  }
+  100% {
+    background-color: var(--activity);
+    box-shadow: none;
+  }
+}
+
+.trip-root.trip-surface .timeline-axis {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 26px;
+  flex-shrink: 0;
+  padding-top: 2px;
+  align-self: stretch;
+}
+
+.trip-root.trip-surface .timeline-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #81c784, #43a047);
+  border: 3px solid var(--card, #fff);
+  box-shadow: 0 0 0 2px #a5d6a7;
+  z-index: 1;
+  flex-shrink: 0;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.trip-root.trip-surface .activity-drag-handle:hover .timeline-dot {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 2px #81c784, 0 2px 8px rgba(67, 160, 71, 0.35);
+}
+
+.trip-root.trip-surface .timeline-stem {
+  width: 4px;
+  flex: 1;
+  min-height: 1.35rem;
+  margin-top: 2px;
+  background: linear-gradient(180deg, #66bb6a, #a5d6a7 40%, #c8e6c9);
+  border-radius: 2px;
+  opacity: 0.92;
+}
+
+.trip-root.trip-surface .timeline-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 4.75rem;
+  background: var(--activity);
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-bottom: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1), transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.25s ease;
+}
+
+.trip-root.trip-surface .timeline-row:hover .timeline-panel {
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.11);
+  transform: translateY(-2px);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.trip-root.trip-surface .timeline-panel--editing {
+  background: rgba(129, 199, 132, 0.12);
+  border-color: #66bb6a;
+  box-shadow: 0 0 0 2px rgba(102, 187, 106, 0.35);
+}
+
+.trip-root.trip-surface .activity-done-label {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 4px 2px 0 0;
+  cursor: pointer;
+}
+
+.trip-root.trip-surface .activity-done-label input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--primary, #2e7d32);
+}
+
+.trip-root.trip-surface .timeline-item--completed .timeline-title,
+.trip-root.trip-surface .timeline-item--completed .timeline-time-line {
+  opacity: 0.72;
+}
+
+.trip-root.trip-surface .timeline-item--completed .timeline-title {
+  text-decoration: line-through;
+}
+
+.trip-root.trip-surface .timeline-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.trip-root.trip-surface .timeline-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.trip-root.trip-surface .timeline-main--clickable {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  transition: background 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.trip-root.trip-surface .timeline-main--clickable:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.trip-root.trip-surface .timeline-main--clickable:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.trip-root.trip-surface .activity-drag-handle {
+  cursor: grab;
+}
+
+.trip-root.trip-surface .activity-drag-handle:active {
+  cursor: grabbing;
+}
+
+.trip-root.trip-surface .quick-add-activity-btn {
+  margin-top: 10px;
+  margin-bottom: 4px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px dashed #81c784;
+  background: rgba(129, 199, 132, 0.12);
+  color: #2e7d32;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trip-root.trip-surface .quick-add-activity-btn:hover:not(:disabled) {
+  background: rgba(129, 199, 132, 0.22);
+}
+
+.trip-root.trip-surface .quick-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(129, 199, 132, 0.08);
+  border: 1px solid rgba(129, 199, 132, 0.35);
+}
+
+.trip-root.trip-surface .quick-add-time {
+  width: auto;
+  min-width: 5.5rem;
+}
+
+.trip-root.trip-surface .quick-add-title {
+  flex: 1;
+  min-width: 160px;
+}
+
+.trip-root.trip-surface .quick-add-save {
+  margin-left: 0;
+}
+
+.trip-root.trip-surface .timeline-time-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.trip-root.trip-surface .timeline-emoji {
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+.trip-root.trip-surface .timeline-time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #2e7d32;
+}
+
+.trip-root.trip-surface .timeline-end {
+  font-size: 0.88rem;
+  color: var(--text-light);
+  font-variant-numeric: tabular-nums;
+}
+
+.trip-root.trip-surface .timeline-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.trip-root.trip-surface .type-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.trip-root.trip-surface .timeline-title {
+  font-weight: 600;
+}
+
+.trip-root.trip-surface .map-link {
+  font-size: 0.82rem;
+  color: var(--primary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.trip-root.trip-surface .map-link:hover {
+  border-bottom-color: var(--primary-hover);
+  color: var(--primary-hover);
+}
+
+.trip-root.trip-surface .timeline-actions {
+  flex-shrink: 0;
+}
+
+.trip-root.trip-surface .timeline-actions button {
+  margin-left: 4px;
+}
+
+.trip-root.trip-surface .activity-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.trip-root.trip-surface .inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.trip-root.trip-surface .transport-form .transport-arrow {
+  margin: 0 2px;
+  color: var(--text-light);
+}
+
+.trip-root.trip-surface .transport-type {
+  color: var(--text-light);
+  font-size: 0.9em;
+}
+
+.trip-root.trip-surface .simple-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+}
+
+.trip-root.trip-surface .list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--border, #eee);
+  font-size: 0.95rem;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+.trip-root.trip-surface .list-row:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.trip-root.trip-surface .list-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.trip-root.trip-surface .map-links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.trip-root.trip-surface button.linkish {
+  background: transparent !important;
+  color: #c62828;
+  text-decoration: underline;
+  padding: 4px 8px;
+}
+
+.trip-root.trip-surface button.linkish:hover:not(:disabled) {
+  background: transparent !important;
+  color: #b71c1c;
+}
+
+.trip-root.trip-surface .days-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  touch-action: pan-y;
+}
+
+.trip-root.trip-surface .accordion-enter-active,
+.trip-root.trip-surface .accordion-leave-active {
+  transition: max-height 0.2s ease, opacity 0.18s ease;
+  overflow: hidden;
+}
+
+.trip-root.trip-surface .accordion-enter-from,
+.trip-root.trip-surface .accordion-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+
+.trip-root.trip-surface .accordion-enter-to,
+.trip-root.trip-surface .accordion-leave-from {
+  max-height: 2000px;
+  opacity: 1;
+}
+
+.trip-root.trip-surface .fade-slide-enter-active,
+.trip-root.trip-surface .fade-slide-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.trip-root.trip-surface .fade-slide-enter-from,
+.trip-root.trip-surface .fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.trip-root.trip-surface .loading {
+  color: var(--text-light);
+  margin-bottom: 12px;
+}
+
+.trip-root.trip-surface .day-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+html.dark .trip-root.trip-surface .timeline-row:hover .timeline-panel {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.dark .trip-root.trip-surface .timeline-panel--editing {
+  background: rgba(129, 199, 132, 0.15);
+  border-color: #81c784;
+  box-shadow: 0 0 0 2px rgba(129, 199, 132, 0.35);
+}
+
+html.dark .trip-root.trip-surface .timeline-main--clickable:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html.dark .trip-root.trip-surface .quick-add-activity-btn {
+  border-color: #558b2f;
+  color: #c8e6c9;
+  background: rgba(129, 199, 132, 0.12);
+}
+
+html.dark .trip-root.trip-surface .quick-add-row {
+  background: rgba(129, 199, 132, 0.1);
+  border-color: rgba(129, 199, 132, 0.35);
+}
+
+html.dark .trip-root.trip-surface .trip-duration {
+  color: var(--primary);
+}
+
+html.dark .trip-root.trip-surface .trip-date-range {
+  color: var(--text-light);
+}
+
+html.dark .trip-root.trip-surface .trip-desc-readonly {
+  color: var(--text-light);
+}
+
+html.dark .trip-root.trip-surface .timeline-end {
+  color: var(--text);
+}
+
+html.dark .trip-root.trip-surface .transport-type,
+html.dark .trip-root.trip-surface .transport-form .transport-arrow {
+  color: var(--text-light);
+}
+
+html.dark .trip-root.trip-surface .empty-hint {
+  color: var(--text);
+}
+
+html.dark .trip-root.trip-surface .empty-hint.muted {
+  color: var(--text-light);
+}
+
+html.dark .trip-root.trip-surface .loading {
+  color: var(--text-light);
+}
+
+html.dark .trip-root.trip-surface input::placeholder {
+  color: var(--text-light);
+}
+
+html.dark .trip-root.trip-surface .map-link {
+  color: var(--primary);
+}
+
+html.dark .trip-root.trip-surface .map-link:hover {
+  border-bottom-color: var(--primary-hover);
+  color: var(--primary-hover);
+}
+
+@media (max-width: 768px) {
+  .trip-root.trip-surface .quick-add-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .trip-root.trip-surface .quick-add-row input,
+  .trip-root.trip-surface .quick-add-row select {
+    min-height: 44px;
+    font-size: 16px;
+    padding: 10px 12px;
+  }
+
+  .trip-root.trip-surface .quick-add-save,
+  .trip-root.trip-surface .quick-add-activity-btn {
+    min-height: 44px;
+    padding: 12px 16px;
+    font-size: 1rem;
+  }
+
+  .trip-root.trip-surface .timeline-axis.activity-drag-handle {
+    width: 44px;
+    min-width: 44px;
+    padding-top: 6px;
+    padding-bottom: 4px;
+  }
+
+  .trip-root.trip-surface .activity-edit {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .trip-root.trip-surface .activity-edit input,
+  .trip-root.trip-surface .activity-edit button {
+    min-height: 44px;
+    font-size: 16px;
+    padding: 10px 12px;
+  }
+
+  .trip-root.trip-surface .timeline-actions button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+    font-size: 1.1rem;
+  }
+
+  .trip-root.trip-surface .activity-done-label {
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px 0 0;
+  }
+
+  .trip-root.trip-surface .activity-done-label input {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+}

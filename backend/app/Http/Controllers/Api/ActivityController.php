@@ -2,16 +2,18 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AuthorizesOwnedApiResources;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreActivityRequest;
 use App\Http\Requests\UpdateActivityRequest;
 use App\Http\Resources\ActivityResource;
 use App\Models\Activity;
-use App\Models\Day;
 use Illuminate\Http\Request;
 
 class ActivityController extends Controller
 {
+    use AuthorizesOwnedApiResources;
+
     // GET /api/activities
     public function index(Request $request)
     {
@@ -21,7 +23,9 @@ class ActivityController extends Controller
             ->orderBy('order');
 
         if ($request->filled('day_id')) {
-            $query->where('day_id', (int) $request->query('day_id'));
+            $dayId = (int) $request->query('day_id');
+            $this->findDayForUserOrAbort($request, $dayId);
+            $query->where('day_id', $dayId);
         }
 
         return $this->successResponse(ActivityResource::collection($query->get()), 200);
@@ -30,8 +34,7 @@ class ActivityController extends Controller
     // GET /api/activities/{id}
     public function show(Request $request, $id)
     {
-        $activity = Activity::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $activity = $this->findActivityForUserOrAbort($request, (int) $id);
 
         return $this->successResponse(new ActivityResource($activity), 200);
     }
@@ -50,9 +53,7 @@ class ActivityController extends Controller
             ], 422);
         }
 
-        Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->whereKey($resolvedDayId)
-            ->firstOrFail();
+        $this->findDayForUserOrAbort($request, (int) $resolvedDayId);
 
         $order = $validated['order'] ?? Activity::where('day_id', $resolvedDayId)->count();
         $activity = Activity::create([
@@ -62,6 +63,7 @@ class ActivityController extends Controller
             'start_time' => $validated['start_time'],
             'end_time' => $validated['end_time'] ?? null,
             'completed' => $validated['completed'] ?? false,
+            'price' => isset($validated['price']) ? (float) $validated['price'] : 0,
         ]);
 
         return $this->successResponse(new ActivityResource($activity), 201);
@@ -69,8 +71,7 @@ class ActivityController extends Controller
 
     public function update(UpdateActivityRequest $request, $id)
     {
-        $activity = Activity::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $activity = $this->findActivityForUserOrAbort($request, (int) $id);
         $activity->update($request->validated());
 
         return $this->successResponse(new ActivityResource($activity), 200);
@@ -78,9 +79,9 @@ class ActivityController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $activity = Activity::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $activity = $this->findActivityForUserOrAbort($request, (int) $id);
         $activity->delete();
-        return $this->successResponse(['message' => 'Activity deleted successfully.'], 200);
+
+        return response()->noContent();
     }
 }

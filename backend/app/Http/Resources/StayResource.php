@@ -14,11 +14,10 @@ class StayResource extends JsonResource
             'day_id' => $this->day_id,
             'name' => $this->name,
             'location' => $this->location,
+            'price' => round((float) ($this->price ?? 0), 2),
             'check_in' => $this->check_in?->toIso8601String(),
             'check_out' => $this->check_out?->toIso8601String(),
             'notes' => $this->notes,
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
         ];
     }
 }

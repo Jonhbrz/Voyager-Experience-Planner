@@ -1,0 +1,73 @@
+# CI — PRW-VEP (frontend build, tests Laravel, documentación MkDocs)
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Build, test & docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- Frontend (Vue + Vite) ---
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # --- Backend (Laravel + PHPUnit en SQLite :memory:) ---
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, xml, sqlite3, pdo_sqlite, bcmath, ctype, fileinfo, tokenizer
+          coverage: none
+
+      - name: Install Composer dependencies
+        working-directory: backend
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Prepare Laravel environment for tests
+        working-directory: backend
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+
+      - name: Run backend tests
+        working-directory: backend
+        run: php artisan test
+
+      # --- Documentación (MkDocs + tema Material del mkdocs.yml) ---
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install MkDocs and Material theme
+        run: pip install "mkdocs>=1.6" "mkdocs-material>=9.5"
+
+      - name: Build MkDocs site
+        run: mkdocs build

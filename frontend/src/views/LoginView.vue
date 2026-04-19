@@ -40,7 +40,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="auth-page">
+  <main id="main-content" class="auth-page" tabindex="-1">
     <div class="auth-card">
       <h1>Iniciar sesión</h1>
       <p class="hint">Voyager Experience Planner</p>
@@ -75,7 +75,7 @@ async function submit() {
         <RouterLink to="/register">Regístrate</RouterLink>
       </p>
     </div>
-  </div>
+  </main>
 </template>
 
 <style scoped>

@@ -2,31 +2,23 @@
 import axios from 'axios'
 import type { Trip, Day, Activity, Transport, Stay } from '@/types/trip'
 import api from '@/services/api'
+import { clampPrice, getTripTotal } from '@/utils/tripTotals'
 
 let messageDismissTimer: ReturnType<typeof setTimeout> | null = null
-
-// —— Request queue (serializa llamadas API; evita condiciones de carrera) ——
-const requestQueue: Array<() => Promise<void>> = []
-let isProcessingQueue = false
+const RETRYABLE_NETWORK_CODES = new Set(['ECONNABORTED', 'ERR_NETWORK', 'ETIMEDOUT'])
+const MAX_BACKGROUND_RETRIES = 3
 
 function enqueueRequest(requestFn: () => Promise<void>) {
-  requestQueue.push(requestFn)
-  void processQueue()
+  void requestFn().catch((e) => {
+    console.error('Request error', e)
+  })
 }
 
-async function processQueue() {
-  if (isProcessingQueue) return
-  isProcessingQueue = true
-  while (requestQueue.length) {
-    const req = requestQueue.shift()
-    if (!req) continue
-    try {
-      await req()
-    } catch (e) {
-      console.error('Queue error', e)
-    }
-  }
-  isProcessingQueue = false
+function isRetryableNetworkError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false
+  if (!error.response) return true
+  const status = error.response.status ?? 0
+  return status >= 500 || RETRYABLE_NETWORK_CODES.has(error.code ?? '')
 }
 
 /** Garantiza YYYY-MM-DD para la API (evita ISO con zona horaria). */
@@ -65,28 +57,29 @@ function sortedActivitiesCopy(activities: Activity[]): Activity[] {
   })
 }
 
-function tripHasActivity(trip: Trip, activityId: number): boolean {
-  return trip.days.some(d => d.activities.some(a => a.id === activityId))
-}
-
-/** Sustituye una actividad por id en todo el árbol de viajes (reactividad inmutable). */
+/** Sustituye una actividad por id (un solo viaje contiene un activityId dado). */
 function mapTripsPatchActivity(
   trips: Trip[],
   activityId: number,
   patch: Partial<Activity>
 ): Trip[] {
-  return trips.map(trip => {
-    if (!tripHasActivity(trip, activityId)) return trip
-    return {
-      ...trip,
-      days: trip.days.map(day => ({
-        ...day,
-        activities: day.activities.map(a =>
-          a.id === activityId ? { ...a, ...patch } : a
-        ),
-      })),
-    }
-  })
+  const tripIndex = trips.findIndex(t =>
+    t.days.some(d => d.activities.some(a => a.id === activityId))
+  )
+  if (tripIndex === -1) return trips.map(t => t)
+  return trips.map((trip, i) =>
+    i !== tripIndex
+      ? trip
+      : {
+          ...trip,
+          days: trip.days.map(day => ({
+            ...day,
+            activities: day.activities.map(a =>
+              a.id === activityId ? { ...a, ...patch } : a
+            ),
+          })),
+        }
+  )
 }
 
 function mapTripsUpdateTrip(
@@ -150,9 +143,46 @@ export const useTripsStore = defineStore('trips', {
     totalTrips: (state) => state.trips.length,
     /** Solo el primer fetch de viajes; no bloquea la UI por mutaciones en cola. */
     isBootstrapping: (state) => !state.initialLoadDone && state.isLoading,
+    totalSpentAllTrips: (state) => {
+      let sum = 0
+      for (const trip of state.trips) {
+        if (trip) sum += getTripTotal(trip)
+      }
+      return sum
+    },
   },
 
   actions: {
+    queueBackgroundRetry(
+      taskName: string,
+      requestAction: () => Promise<void>,
+      onExhausted: () => void
+    ) {
+      const runAttempt = async (attempt: number) => {
+        this.beginSync()
+        try {
+          await requestAction()
+          this.successMessage = `${taskName} sincronizado.`
+          scheduleMessageAutoClear(this)
+        } catch (error) {
+          if (attempt < MAX_BACKGROUND_RETRIES && isRetryableNetworkError(error)) {
+            const delayMs = 300 * 2 ** (attempt - 1)
+            setTimeout(() => {
+              enqueueRequest(() => runAttempt(attempt + 1))
+            }, delayMs)
+          } else {
+            onExhausted()
+            this.setError(error, `No se pudo sincronizar: ${taskName.toLowerCase()}.`)
+            scheduleMessageAutoClear(this)
+          }
+        } finally {
+          this.endSync()
+        }
+      }
+
+      enqueueRequest(() => runAttempt(1))
+    },
+
     setLoading(value: boolean) {
       this.isLoading = value
     },
@@ -219,9 +249,16 @@ export const useTripsStore = defineStore('trips', {
           activities: (d.activities || []).map(a => ({
             ...a,
             completed: !!(a.completed ?? false),
+            price: clampPrice(a.price),
           })),
-          transports: d.transports || [],
-          stays: d.stays || [],
+          transports: (d.transports || []).map(t => ({
+            ...t,
+            price: clampPrice(t.price),
+          })),
+          stays: (d.stays || []).map(s => ({
+            ...s,
+            price: clampPrice(s.price),
+          })),
         })),
       }
     },
@@ -307,13 +344,31 @@ export const useTripsStore = defineStore('trips', {
           store.successMessage = 'Viaje actualizado.'
           scheduleMessageAutoClear(store)
         } catch (error) {
-          store.trips = mapTripsUpdateTrip(store.trips, tripId, t => ({
-            ...t,
-            name: prevName,
-          }))
-          store.setError(error, 'No se pudo actualizar el viaje.')
-          scheduleMessageAutoClear(store)
-          throw error
+          if (!isRetryableNetworkError(error)) {
+            store.trips = mapTripsUpdateTrip(store.trips, tripId, t => ({
+              ...t,
+              name: prevName,
+            }))
+            store.setError(error, 'No se pudo actualizar el viaje.')
+            scheduleMessageAutoClear(store)
+            throw error
+          }
+
+          store.queueBackgroundRetry(
+            'Viaje',
+            async () => {
+              await api.put(`/trips/${tripId}`, {
+                name: trimmed,
+                description: prevDesc,
+              })
+            },
+            () => {
+              store.trips = mapTripsUpdateTrip(store.trips, tripId, t => ({
+                ...t,
+                name: prevName,
+              }))
+            }
+          )
         } finally {
           store.endSync()
         }
@@ -412,13 +467,34 @@ export const useTripsStore = defineStore('trips', {
           store.successMessage = 'Día actualizado.'
           scheduleMessageAutoClear(store)
         } catch (error) {
-          store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
-            ...d,
-            title: previousTitle,
-          }))
-          store.setError(error, 'No se pudo actualizar el día.')
-          scheduleMessageAutoClear(store)
-          throw error
+          if (!isRetryableNetworkError(error)) {
+            store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+              ...d,
+              title: previousTitle,
+            }))
+            store.setError(error, 'No se pudo actualizar el día.')
+            scheduleMessageAutoClear(store)
+            throw error
+          }
+
+          store.queueBackgroundRetry(
+            'Día',
+            async () => {
+              const res = await api.put(`/days/${dayId}`, { title: trimmed })
+              const updated = res.data.data as Day
+              store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+                ...d,
+                title: (updated.title ?? trimmed).trim(),
+                order: updated.order ?? d.order,
+              }))
+            },
+            () => {
+              store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
+                ...d,
+                title: previousTitle,
+              }))
+            }
+          )
         } finally {
           store.endSync()
         }
@@ -484,14 +560,34 @@ export const useTripsStore = defineStore('trips', {
           const updated = res.data.data as Activity
           store.trips = mapTripsPatchActivity(store.trips, activityId, {
             completed: !!(updated.completed ?? completed),
+            price: clampPrice(updated.price),
           })
         } catch (error) {
-          store.trips = mapTripsPatchActivity(store.trips, activityId, {
-            completed: previousCompleted,
-          })
-          store.setError(error, 'No se pudo actualizar la actividad.')
-          scheduleMessageAutoClear(store)
-          throw error
+          if (!isRetryableNetworkError(error)) {
+            store.trips = mapTripsPatchActivity(store.trips, activityId, {
+              completed: previousCompleted,
+            })
+            store.setError(error, 'No se pudo actualizar la actividad.')
+            scheduleMessageAutoClear(store)
+            throw error
+          }
+
+          store.queueBackgroundRetry(
+            'Actividad',
+            async () => {
+              const res = await api.put(`/activities/${activityId}`, { completed })
+              const updated = res.data.data as Activity
+              store.trips = mapTripsPatchActivity(store.trips, activityId, {
+                completed: !!(updated.completed ?? completed),
+                price: clampPrice(updated.price),
+              })
+            },
+            () => {
+              store.trips = mapTripsPatchActivity(store.trips, activityId, {
+                completed: previousCompleted,
+              })
+            }
+          )
         } finally {
           store.endSync()
         }
@@ -501,7 +597,7 @@ export const useTripsStore = defineStore('trips', {
     async addActivity(
       tripId: number,
       dayId: number,
-      payload: { title: string; start_time: string; end_time?: string | null }
+      payload: { title: string; start_time: string; end_time?: string | null; price?: number }
     ): Promise<void> {
       const store = this
       return new Promise((resolve, reject) => {
@@ -515,6 +611,9 @@ export const useTripsStore = defineStore('trips', {
             if (payload.end_time != null && String(payload.end_time).trim() !== '') {
               body.end_time = payload.end_time
             }
+            if (payload.price != null && Number.isFinite(payload.price)) {
+              body.price = clampPrice(payload.price)
+            }
 
             const res = await api.post(`/days/${dayId}/activities`, body)
             const created = res.data.data as Activity
@@ -526,6 +625,7 @@ export const useTripsStore = defineStore('trips', {
                 {
                   ...created,
                   completed: !!(created.completed ?? false),
+                  price: clampPrice(created.price),
                 },
               ]),
             }))
@@ -549,7 +649,7 @@ export const useTripsStore = defineStore('trips', {
       tripId: number,
       dayId: number,
       activityId: number,
-      payload: { title: string; start_time: string; end_time?: string | null }
+      payload: { title: string; start_time: string; end_time?: string | null; price?: number }
     ) {
       const trip = this.trips.find(t => t.id === tripId)
       const day = trip?.days.find(d => d.id === dayId)
@@ -561,16 +661,20 @@ export const useTripsStore = defineStore('trips', {
           ? payload.end_time
           : null
 
-      const snapshot: Pick<Activity, 'title' | 'start_time' | 'end_time'> = {
+      const snapshot: Pick<Activity, 'title' | 'start_time' | 'end_time' | 'price'> = {
         title: activity.title,
         start_time: activity.start_time,
         end_time: activity.end_time ?? null,
+        price: clampPrice(activity.price),
       }
+
+      const nextPrice = payload.price != null ? clampPrice(payload.price) : snapshot.price
 
       this.trips = mapTripsPatchActivity(this.trips, activityId, {
         title: payload.title,
         start_time: payload.start_time,
         end_time: nextEnd,
+        price: nextPrice,
       })
       this.trips = mapTripsSortActivitiesInDay(this.trips, tripId, dayId)
 
@@ -582,6 +686,7 @@ export const useTripsStore = defineStore('trips', {
             title: payload.title,
             start_time: payload.start_time,
             end_time: nextEnd,
+            price: nextPrice,
           })
           const updated = res.data.data as Activity
           store.trips = mapTripsPatchActivity(store.trips, activityId, {
@@ -589,20 +694,54 @@ export const useTripsStore = defineStore('trips', {
             start_time: updated.start_time,
             end_time: updated.end_time ?? null,
             completed: !!(updated.completed ?? false),
+            price: clampPrice(updated.price),
           })
           store.trips = mapTripsSortActivitiesInDay(store.trips, tripId, dayId)
           store.successMessage = 'Actividad actualizada.'
           scheduleMessageAutoClear(store)
         } catch (error) {
-          store.trips = mapTripsPatchActivity(store.trips, activityId, {
-            title: snapshot.title,
-            start_time: snapshot.start_time,
-            end_time: snapshot.end_time,
-          })
-          store.trips = mapTripsSortActivitiesInDay(store.trips, tripId, dayId)
-          store.setError(error, 'No se pudo actualizar la actividad.')
-          scheduleMessageAutoClear(store)
-          throw error
+          if (!isRetryableNetworkError(error)) {
+            store.trips = mapTripsPatchActivity(store.trips, activityId, {
+              title: snapshot.title,
+              start_time: snapshot.start_time,
+              end_time: snapshot.end_time,
+              price: snapshot.price,
+            })
+            store.trips = mapTripsSortActivitiesInDay(store.trips, tripId, dayId)
+            store.setError(error, 'No se pudo actualizar la actividad.')
+            scheduleMessageAutoClear(store)
+            throw error
+          }
+
+          store.queueBackgroundRetry(
+            'Actividad',
+            async () => {
+              const res = await api.put(`/activities/${activityId}`, {
+                title: payload.title,
+                start_time: payload.start_time,
+                end_time: nextEnd,
+                price: nextPrice,
+              })
+              const updated = res.data.data as Activity
+              store.trips = mapTripsPatchActivity(store.trips, activityId, {
+                title: updated.title,
+                start_time: updated.start_time,
+                end_time: updated.end_time ?? null,
+                completed: !!(updated.completed ?? false),
+                price: clampPrice(updated.price),
+              })
+              store.trips = mapTripsSortActivitiesInDay(store.trips, tripId, dayId)
+            },
+            () => {
+              store.trips = mapTripsPatchActivity(store.trips, activityId, {
+                title: snapshot.title,
+                start_time: snapshot.start_time,
+                end_time: snapshot.end_time,
+                price: snapshot.price,
+              })
+              store.trips = mapTripsSortActivitiesInDay(store.trips, tripId, dayId)
+            }
+          )
         } finally {
           store.endSync()
         }
@@ -666,9 +805,7 @@ export const useTripsStore = defineStore('trips', {
         enqueueRequest(async () => {
           store.beginSync()
           try {
-            for (const a of previousActivities) {
-              await api.delete(`/activities/${a.id}`)
-            }
+            await Promise.all(previousActivities.map((a) => api.delete(`/activities/${a.id}`)))
             store.successMessage = 'Actividades eliminadas.'
             scheduleMessageAutoClear(store)
             resolve()
@@ -691,25 +828,30 @@ export const useTripsStore = defineStore('trips', {
     async addTransport(
       tripId: number,
       dayId: number,
-      payload: { from: string; to: string; type: string; duration?: string; notes?: string }
+      payload: { from: string; to: string; type: string; price?: number; duration?: string; notes?: string }
     ): Promise<void> {
       const store = this
       return new Promise((resolve, reject) => {
         enqueueRequest(async () => {
           store.beginSync()
           try {
-            const res = await api.post(`/days/${dayId}/transports`, {
+            const transportBody: Record<string, unknown> = {
               from: payload.from,
               to: payload.to,
               type: payload.type,
               duration: payload.duration?.trim() || undefined,
               notes: payload.notes?.trim() || undefined,
-            })
+            }
+            if (payload.price != null && Number.isFinite(payload.price)) {
+              transportBody.price = clampPrice(payload.price)
+            }
+
+            const res = await api.post(`/days/${dayId}/transports`, transportBody)
 
             const row = res.data.data as Transport
             store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
               ...d,
-              transports: [...d.transports, row],
+              transports: [...d.transports, { ...row, price: clampPrice(row.price) }],
             }))
             store.successMessage = 'Transporte añadido.'
             scheduleMessageAutoClear(store)
@@ -765,7 +907,7 @@ export const useTripsStore = defineStore('trips', {
     async addStay(
       tripId: number,
       dayId: number,
-      payload: { name: string; location: string; check_in?: string; check_out?: string; notes?: string }
+      payload: { name: string; location: string; price?: number; check_in?: string; check_out?: string; notes?: string }
     ): Promise<void> {
       const store = this
       return new Promise((resolve, reject) => {
@@ -776,6 +918,9 @@ export const useTripsStore = defineStore('trips', {
               name: payload.name,
               location: payload.location,
             }
+            if (payload.price != null && Number.isFinite(payload.price)) {
+              body.price = clampPrice(payload.price)
+            }
             if (payload.check_in?.trim()) body.check_in = payload.check_in
             if (payload.check_out?.trim()) body.check_out = payload.check_out
             if (payload.notes?.trim()) body.notes = payload.notes
@@ -785,7 +930,7 @@ export const useTripsStore = defineStore('trips', {
 
             store.trips = mapTripsUpdateDay(store.trips, tripId, dayId, d => ({
               ...d,
-              stays: [...d.stays, row],
+              stays: [...d.stays, { ...row, price: clampPrice(row.price) }],
             }))
             store.successMessage = 'Estancia añadida.'
             scheduleMessageAutoClear(store)

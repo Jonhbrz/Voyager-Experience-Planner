@@ -6,7 +6,7 @@ const toast = useToastStore()
 
 <template>
   <Teleport to="body">
-    <div class="toast-host" aria-live="polite">
+    <div class="toast-host" aria-live="polite" aria-label="Notificaciones">
       <TransitionGroup name="toast" tag="div" class="toast-stack">
         <div
           v-for="t in toast.items"

@@ -2,15 +2,34 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AuthorizesOwnedApiResources;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreStayRequest;
+use App\Http\Requests\UpdateStayRequest;
 use App\Http\Resources\StayResource;
-use App\Models\Day;
 use App\Models\Stay;
 use Illuminate\Http\Request;
 
 class StayController extends Controller
 {
+    use AuthorizesOwnedApiResources;
+
+    public function index(Request $request)
+    {
+        $stays = Stay::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->latest('id')
+            ->get();
+
+        return $this->successResponse(StayResource::collection($stays), 200);
+    }
+
+    public function show(Request $request, $id)
+    {
+        $stay = $this->findStayForUserOrAbort($request, (int) $id);
+
+        return $this->successResponse(new StayResource($stay), 200);
+    }
+
     public function store(StoreStayRequest $request, $dayId = null)
     {
         $validated = $request->validated();
@@ -24,14 +43,13 @@ class StayController extends Controller
             ], 422);
         }
 
-        Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->whereKey($resolvedDayId)
-            ->firstOrFail();
+        $this->findDayForUserOrAbort($request, (int) $resolvedDayId);
 
         $stay = Stay::create([
             'day_id' => $resolvedDayId,
             'name' => $validated['name'],
             'location' => $validated['location'],
+            'price' => isset($validated['price']) ? (float) $validated['price'] : 0,
             'check_in' => $validated['check_in'] ?? null,
             'check_out' => $validated['check_out'] ?? null,
             'notes' => $validated['notes'] ?? null,
@@ -40,12 +58,20 @@ class StayController extends Controller
         return $this->successResponse(new StayResource($stay), 201);
     }
 
+    public function update(UpdateStayRequest $request, $id)
+    {
+        $stay = $this->findStayForUserOrAbort($request, (int) $id);
+
+        $stay->update($request->validated());
+
+        return $this->successResponse(new StayResource($stay->fresh()), 200);
+    }
+
     public function destroy(Request $request, $id)
     {
-        $stay = Stay::whereHas('day.trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $stay = $this->findStayForUserOrAbort($request, (int) $id);
         $stay->delete();
 
-        return $this->successResponse(['message' => 'Stay deleted successfully.'], 200);
+        return response()->noContent();
     }
 }

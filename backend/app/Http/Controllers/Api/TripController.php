@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AuthorizesOwnedApiResources;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreTripRequest;
 use App\Http\Requests\UpdateTripRequest;
@@ -14,13 +15,21 @@ use Illuminate\Support\Facades\DB;
 
 class TripController extends Controller
 {
+    use AuthorizesOwnedApiResources;
+
     // GET /api/trips
     public function index(Request $request)
     {
         $perPage = (int) $request->query('per_page', 0);
         $query = Trip::query()
             ->where('user_id', $request->user()->id)
-            ->with(['days.activities', 'days.transports', 'days.stays'])
+            ->select(['id', 'user_id', 'name', 'description', 'start_date', 'end_date'])
+            ->with([
+                'days:id,trip_id,title,order',
+                'days.activities:id,day_id,title,order,start_time,end_time,completed,price',
+                'days.transports:id,day_id,from,to,type,price,duration,notes',
+                'days.stays:id,day_id,name,location,price,check_in,check_out,notes',
+            ])
             ->latest();
 
         if ($perPage > 0) {
@@ -35,10 +44,13 @@ class TripController extends Controller
     // GET /api/trips/{id}
     public function show(Request $request, $id)
     {
-        $trip = Trip::query()
-            ->where('user_id', $request->user()->id)
-            ->with(['days.activities', 'days.transports', 'days.stays'])
-            ->findOrFail($id);
+        $trip = $this->findTripForUserOrAbort($request, (int) $id);
+        $trip->load([
+            'days:id,trip_id,title,order',
+            'days.activities:id,day_id,title,order,start_time,end_time,completed,price',
+            'days.transports:id,day_id,from,to,type,price,duration,notes',
+            'days.stays:id,day_id,name,location,price,check_in,check_out,notes',
+        ]);
 
         return $this->successResponse(new TripResource($trip), 200);
     }
@@ -62,18 +74,31 @@ class TripController extends Controller
                 'user_id' => $request->user()->id,
             ]);
 
+            $now = now();
+            $days = [];
             for ($i = 0; $i < $daysCount; $i++) {
-                Day::create([
+                $days[] = [
                     'trip_id' => $trip->id,
                     'title' => 'Día '.($i + 1),
                     'order' => $i,
-                ]);
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            if (!empty($days)) {
+                Day::insert($days);
             }
 
             return $trip;
         });
 
-        $trip->load(['days.activities', 'days.transports', 'days.stays']);
+        $trip->load([
+            'days:id,trip_id,title,order',
+            'days.activities:id,day_id,title,order,start_time,end_time,completed,price',
+            'days.transports:id,day_id,from,to,type,price,duration,notes',
+            'days.stays:id,day_id,name,location,price,check_in,check_out,notes',
+        ]);
 
         return $this->successResponse(new TripResource($trip), 201);
     }
@@ -81,9 +106,7 @@ class TripController extends Controller
     // PUT /api/trips/{id}
     public function update(UpdateTripRequest $request, $id)
     {
-        $trip = Trip::query()
-            ->where('user_id', $request->user()->id)
-            ->findOrFail($id);
+        $trip = $this->findTripForUserOrAbort($request, (int) $id);
         $trip->update($request->validated());
 
         return $this->successResponse(new TripResource($trip), 200);
@@ -92,11 +115,9 @@ class TripController extends Controller
     // DELETE /api/trips/{id}
     public function destroy(Request $request, $id)
     {
-        $trip = Trip::query()
-            ->where('user_id', $request->user()->id)
-            ->findOrFail($id);
+        $trip = $this->findTripForUserOrAbort($request, (int) $id);
         $trip->delete();
 
-        return $this->successResponse(['message' => 'Trip deleted successfully.'], 200);
+        return response()->noContent();
     }
 }

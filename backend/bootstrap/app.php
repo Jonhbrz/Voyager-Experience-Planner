@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Middleware\HandleCors;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -57,5 +58,16 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => 'Endpoint not found.',
                 ], 404);
             }
+        });
+
+        $exceptions->render(function (HttpException $e, Request $request) {
+            if (! $request->is('api/*') || $e->getStatusCode() !== 403) {
+                return null;
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage() ?: 'Forbidden.',
+            ], 403);
         });
     })->create();

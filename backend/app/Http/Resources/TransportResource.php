@@ -15,10 +15,9 @@ class TransportResource extends JsonResource
             'from' => $this->from,
             'to' => $this->to,
             'type' => $this->type,
+            'price' => round((float) ($this->price ?? 0), 2),
             'duration' => $this->duration,
             'notes' => $this->notes,
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
         ];
     }
 }

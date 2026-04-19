@@ -12,9 +12,17 @@ class Transport extends Model
         'from',
         'to',
         'type',
+        'price',
         'duration',
         'notes',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'price' => 'decimal:2',
+        ];
+    }
 
     public function day(): BelongsTo
     {

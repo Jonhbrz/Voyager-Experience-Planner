@@ -18,6 +18,7 @@ class StoreStayRequest extends FormRequest
             'day_id' => 'sometimes|required|integer|exists:days,id',
             'name' => 'required|string|max:255',
             'location' => 'required|string|max:255',
+            'price' => 'sometimes|numeric|min:0|max:999999.99',
             'check_in' => 'nullable|date',
             'check_out' => 'nullable|date',
             'notes' => 'nullable|string',

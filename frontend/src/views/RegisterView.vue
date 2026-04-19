@@ -38,7 +38,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="auth-page">
+  <main id="main-content" class="auth-page" tabindex="-1">
     <div class="auth-card">
       <h1>Crear cuenta</h1>
       <p class="hint">Voyager Experience Planner</p>
@@ -55,15 +55,17 @@ async function submit() {
         <label class="field">
           <span>Contraseña</span>
           <input
+            id="register-password"
             v-model="password"
             type="password"
             autocomplete="new-password"
             required
             minlength="6"
             :disabled="isSubmitting"
+            aria-describedby="register-pw-hint"
           />
         </label>
-        <p class="pw-hint">Mínimo 6 caracteres.</p>
+        <p id="register-pw-hint" class="pw-hint">Mínimo 6 caracteres.</p>
 
         <p v-if="errorMessage" class="error" role="alert">
           {{ errorMessage }}
@@ -79,7 +81,7 @@ async function submit() {
         <RouterLink to="/login">Inicia sesión</RouterLink>
       </p>
     </div>
-  </div>
+  </main>
 </template>
 
 <style scoped>

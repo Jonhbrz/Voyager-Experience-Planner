@@ -11,6 +11,7 @@ class Stay extends Model
         'day_id',
         'name',
         'location',
+        'price',
         'check_in',
         'check_out',
         'notes',
@@ -19,6 +20,7 @@ class Stay extends Model
     protected function casts(): array
     {
         return [
+            'price' => 'decimal:2',
             'check_in' => 'datetime',
             'check_out' => 'datetime',
         ];

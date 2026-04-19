@@ -14,6 +14,7 @@ class Activity extends Model
         'start_time',
         'end_time',
         'completed',
+        'price',
     ];
 
     protected function casts(): array
@@ -22,6 +23,7 @@ class Activity extends Model
             'start_time' => 'datetime:H:i',
             'end_time' => 'datetime:H:i',
             'completed' => 'boolean',
+            'price' => 'decimal:2',
         ];
     }
 

@@ -7,6 +7,8 @@ export interface Activity {
   end_time?: string | null
   /** Completada por el usuario (omitida en APIs antiguas → false). */
   completed?: boolean
+  /** Importe en EUR (API antigua → 0). */
+  price?: number
 }
 
 export interface Transport {
@@ -15,6 +17,8 @@ export interface Transport {
   from: string
   to: string
   type: string
+  /** Importe en EUR (API antigua → 0). */
+  price?: number
   duration?: string | null
   notes?: string | null
 }
@@ -24,6 +28,8 @@ export interface Stay {
   day_id: number
   name: string
   location: string
+  /** Importe en EUR (API antigua → 0). */
+  price?: number
   check_in?: string | null
   check_out?: string | null
   notes?: string | null

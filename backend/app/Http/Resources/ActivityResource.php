@@ -18,8 +18,7 @@ class ActivityResource extends JsonResource
             'start_time' => $this->formatTime($this->start_time),
             'end_time' => $this->formatTime($this->end_time),
             'completed' => (bool) $this->completed,
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
+            'price' => round((float) ($this->price ?? 0), 2),
         ];
     }
 

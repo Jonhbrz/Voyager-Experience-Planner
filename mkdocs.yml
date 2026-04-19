@@ -1,0 +1,49 @@
+# MkDocs — Voyager Experience Planner (PRW-VEP)
+# Documentación: https://www.mkdocs.org/
+
+site_name: Voyager Experience Planner
+site_description: Documentación técnica y de usuario del planificador de viajes PRW-VEP
+site_author: Proyecto PRW-VEP
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  palette: 
+    primary: green
+    accent: green
+    theme: dark
+    toggle:
+      icon: material/brightness-4
+      name: Toggle theme
+    sidebar:
+      scroll_spy: true
+      scroll_spy_offset: 100
+  navigation_depth: 4
+  titles_only: false
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - tables
+  - fenced_code
+  - admonition
+
+nav:
+  - Inicio: index.md
+  - Guía de usuario:
+      - Uso de la aplicación: usage.md
+  - Documentación técnica:
+      - Entorno e instalación: setup.md
+      - Control de versiones (Git): version-control.md
+      - Arquitectura: architecture.md
+      - Frontend (Vue): frontend.md
+      - Backend (Laravel): backend.md
+      - Base de datos: database.md
+      - Despliegue: deployment.md
+  - Empleabilidad (IPW): ipw.md
+  - Sostenibilidad (SOJ): soj.md
+
+extra:
+  version: 1.0

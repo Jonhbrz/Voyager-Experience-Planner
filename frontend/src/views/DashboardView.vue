@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import MainLayout from '@/layouts/MainLayout.vue'
+import TripList from '@/components/dashboard/TripList.vue'
 import { useTripsStore } from '@/stores/trips'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -11,9 +12,12 @@ import {
   tripActivityCount,
 } from '@/utils/tripUi'
 import { getTripDuration } from '@/utils/tripDates'
+import { formatSpentEUR, getTripTotal } from '@/utils/tripTotals'
+import { useLastVisitedTrip } from '@/composables/useLastVisitedTrip'
 
 const tripsStore = useTripsStore()
 const router = useRouter()
+const { setLastVisitedTripId } = useLastVisitedTrip()
 
 const showCreateTrip = ref(false)
 const newTripName = ref('')
@@ -115,6 +119,8 @@ const tripsSorted = computed(() =>
   [...tripsStore.trips].sort((a, b) => a.name.localeCompare(b.name, 'es'))
 )
 
+const globalSpentLabel = computed(() => formatSpentEUR(tripsStore.totalSpentAllTrips))
+
 const totalDays = computed(() => {
   return tripsStore.trips.reduce((total, trip) => {
     const d = getTripDuration(trip)
@@ -123,7 +129,26 @@ const totalDays = computed(() => {
   }, 0)
 })
 
+const tripCards = computed(() =>
+  tripsSorted.value.map((trip) => {
+    const days = dayCount(trip)
+    const activities = activityCount(trip)
+    return {
+      id: trip.id,
+      name: trip.name,
+      daysLabel: `${days} ${days === 1 ? 'día' : 'días'}`,
+      activitiesLabel: `${activities} ${activities === 1 ? 'actividad' : 'actividades'}`,
+      spentLabel: formatSpentEUR(getTripTotal(trip)),
+      progress: tripProgress(trip),
+      preview: activityPreview(trip),
+      nextLine: nextActivityLine(trip),
+      nextStatus: nextActivityStatus(trip),
+    }
+  })
+)
+
 const goTrip = (id: number) => {
+  setLastVisitedTripId(id)
   router.push(`/trip/${id}`)
 }
 
@@ -135,7 +160,7 @@ function tripProgress(trip: Trip) {
 <template>
   <MainLayout>
     <div class="dashboard-head">
-      <h1>Mi Experiencia</h1>
+      <h1 id="dashboard-main-heading">Mi Experiencia</h1>
       <button
         type="button"
         class="btn-create"
@@ -225,8 +250,9 @@ function tripProgress(trip: Trip) {
     </div>
 
     <template v-else>
+    <section class="dashboard-body" aria-labelledby="dashboard-main-heading">
     <div class="dashboard-stats">
-      <p class="dashboard-stats-label">🌍 Días de viaje totales</p>
+      <p class="dashboard-stats-label"><span aria-hidden="true">🌍 </span>Días de viaje totales</p>
       <h2 v-if="totalDays > 0" class="dashboard-stats-value">{{ totalDays }}</h2>
       <p v-else class="dashboard-stats-empty">Aún no has planificado días de viaje ✈️</p>
     </div>
@@ -236,62 +262,17 @@ function tripProgress(trip: Trip) {
         <h3>Total de viajes</h3>
         <p class="stat-value">{{ tripsStore.totalTrips }}</p>
       </div>
+      <div v-if="tripsStore.trips.length" class="stat-card card-hover stat-card--spent">
+        <h3 id="dashboard-spent-heading">Gasto total</h3>
+        <p class="stat-value stat-value--spent" aria-labelledby="dashboard-spent-heading">{{ globalSpentLabel }}</p>
+        <p class="stat-sub">Todos los viajes (actividades, transportes, estancias)</p>
+      </div>
     </div>
 
     <h2 class="trips-heading">Tus viajes</h2>
 
-    <ul v-if="tripsSorted.length" class="trip-grid">
-      <li
-        v-for="trip in tripsSorted"
-        :key="trip.id"
-        class="trip-card"
-        role="button"
-        tabindex="0"
-        @click="goTrip(trip.id)"
-        @keydown.enter.prevent="goTrip(trip.id)"
-        @keydown.space.prevent="goTrip(trip.id)"
-      >
-        <h3 class="trip-name">{{ trip.name }}</h3>
-        <ul class="trip-meta">
-          <li>{{ dayCount(trip) }} {{ dayCount(trip) === 1 ? 'día' : 'días' }}</li>
-          <li>{{ activityCount(trip) }} {{ activityCount(trip) === 1 ? 'actividad' : 'actividades' }}</li>
-          <li v-if="activityCount(trip) > 0" class="trip-progress-meta">
-            Progreso {{ tripProgress(trip) }}%
-          </li>
-        </ul>
-        <div
-          v-if="activityCount(trip) > 0"
-          class="trip-progress-bar"
-          role="progressbar"
-          :aria-valuenow="tripProgress(trip)"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          :aria-label="`Progreso del viaje ${trip.name}: ${tripProgress(trip)} por ciento`"
-        >
-          <div class="trip-progress-fill" :style="{ width: `${tripProgress(trip)}%` }" />
-        </div>
-        <ul v-if="activityPreview(trip).length" class="trip-preview">
-          <li v-for="(row, idx) in activityPreview(trip)" :key="idx" class="trip-preview-row">
-            <span class="trip-preview-time">🕘 {{ row.start_time }}</span>
-            <span class="trip-preview-title">{{ row.title }}</span>
-          </li>
-        </ul>
-        <p v-if="nextActivityStatus(trip) === 'has-next'" class="trip-next">
-          {{ nextActivityLine(trip) }}
-        </p>
-        <p v-else-if="nextActivityStatus(trip) === 'no-pending'" class="trip-next muted">
-          Sin actividades pendientes
-        </p>
-        <p v-else class="trip-next muted">
-          Sin actividades todavía — abre el viaje para planificar
-        </p>
-        <span class="trip-cta">Abrir →</span>
-      </li>
-    </ul>
-
-    <p v-else class="empty-dash">
-      Aún no hay viajes. Crea uno para empezar 🚀
-    </p>
+    <TripList :trips="tripCards" @open="goTrip" />
+    </section>
     </template>
   </MainLayout>
 </template>
@@ -519,15 +500,30 @@ h1 {
 
 .stats {
   margin-bottom: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: stretch;
 }
 
 .stat-card {
   background: var(--card);
   padding: 18px 22px;
   border-radius: 12px;
-  max-width: 240px;
+  max-width: 280px;
   border: 1px solid var(--border);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.stat-card--spent .stat-value--spent {
+  color: var(--primary);
+}
+
+.stat-sub {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-light);
+  line-height: 1.35;
 }
 
 .stat-card h3 {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AuthorizesOwnedApiResources;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDayRequest;
 use App\Http\Requests\UpdateDayRequest;
@@ -11,18 +12,25 @@ use Illuminate\Http\Request;
 
 class DayController extends Controller
 {
+    use AuthorizesOwnedApiResources;
+
     // GET /api/days
     public function index(Request $request)
     {
         $userId = $request->user()->id;
 
-        $query = Day::with(['activities', 'transports', 'stays'])
+        $query = Day::select(['id', 'trip_id', 'title', 'order'])
+            ->with([
+                'activities:id,day_id,title,order,start_time,end_time,completed',
+                'transports:id,day_id,from,to,type,duration,notes',
+                'stays:id,day_id,name,location,check_in,check_out,notes',
+            ])
             ->whereHas('trip', fn ($q) => $q->where('user_id', $userId))
             ->orderBy('order');
 
         if ($request->filled('trip_id')) {
             $tripId = (int) $request->query('trip_id');
-            $request->user()->trips()->whereKey($tripId)->firstOrFail();
+            $this->findTripForUserOrAbort($request, $tripId);
             $query->where('trip_id', $tripId);
         }
 
@@ -32,9 +40,12 @@ class DayController extends Controller
     // GET /api/days/{id}
     public function show(Request $request, $id)
     {
-        $day = Day::with(['activities', 'transports', 'stays'])
-            ->whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $day = $this->findDayForUserOrAbort($request, (int) $id);
+        $day->load([
+            'activities:id,day_id,title,order,start_time,end_time,completed',
+            'transports:id,day_id,from,to,type,duration,notes',
+            'stays:id,day_id,name,location,check_in,check_out,notes',
+        ]);
 
         return $this->successResponse(new DayResource($day), 200);
     }
@@ -53,7 +64,7 @@ class DayController extends Controller
             ], 422);
         }
 
-        $request->user()->trips()->whereKey($resolvedTripId)->firstOrFail();
+        $this->findTripForUserOrAbort($request, (int) $resolvedTripId);
 
         $order = $validated['order'] ?? Day::where('trip_id', $resolvedTripId)->count();
         $day = Day::create([
@@ -61,26 +72,33 @@ class DayController extends Controller
             'title' => $validated['title'],
             'order' => $order,
         ]);
-        $day->load(['activities', 'transports', 'stays']);
+        $day->load([
+            'activities:id,day_id,title,order,start_time,end_time,completed',
+            'transports:id,day_id,from,to,type,duration,notes',
+            'stays:id,day_id,name,location,check_in,check_out,notes',
+        ]);
 
         return $this->successResponse(new DayResource($day), 201);
     }
 
     public function update(UpdateDayRequest $request, $id)
     {
-        $day = Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $day = $this->findDayForUserOrAbort($request, (int) $id);
         $day->update($request->validated());
-        $day->load(['activities', 'transports', 'stays']);
+        $day->load([
+            'activities:id,day_id,title,order,start_time,end_time,completed',
+            'transports:id,day_id,from,to,type,duration,notes',
+            'stays:id,day_id,name,location,check_in,check_out,notes',
+        ]);
 
         return $this->successResponse(new DayResource($day), 200);
     }
 
     public function destroy(Request $request, $id)
     {
-        $day = Day::whereHas('trip', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $day = $this->findDayForUserOrAbort($request, (int) $id);
         $day->delete();
-        return $this->successResponse(['message' => 'Day deleted successfully.'], 200);
+
+        return response()->noContent();
     }
 }

@@ -27,6 +27,7 @@ class UpdateActivityRequest extends FormRequest
             'start_time' => 'sometimes|required|date_format:H:i',
             'end_time' => 'nullable|date_format:H:i',
             'completed' => 'sometimes|boolean',
+            'price' => 'sometimes|numeric|min:0|max:999999.99',
         ];
     }
 }
