@@ -32,18 +32,14 @@ markdown_extensions:
 
 nav:
   - Inicio: index.md
-  - Guía de usuario:
-      - Uso de la aplicación: usage.md
-  - Documentación técnica:
-      - Entorno e instalación: setup.md
-      - Control de versiones (Git): version-control.md
-      - Arquitectura: architecture.md
-      - Frontend (Vue): frontend.md
-      - Backend (Laravel): backend.md
-      - Base de datos: database.md
-      - Despliegue: deployment.md
-  - Empleabilidad (IPW): ipw.md
-  - Sostenibilidad (SOJ): soj.md
+  - Guía de usuario: usage.md
+  - DSW - Backend: dsw.md
+  - DEW - Frontend: dew.md
+  - DPL - Despliegue y Git: dpl.md
+  - DOR - Interfaces: dor.md
+  - SSG - Sistema de Gestión: ssg.md
+  - IPW - Prevención Laboral: ipw.md
+  - SOJ - Sostenibilidad: soj.md
 
 extra:
   version: 1.0

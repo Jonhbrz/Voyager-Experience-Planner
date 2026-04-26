@@ -109,4 +109,4 @@ La **materialidad** (qué impactos son prioritarios para informar) depende del *
 ## Referencias
 
 - Marco de empleabilidad y negocio: [Empleabilidad (IPW)](ipw.md)
-- Despliegue y eficiencia operativa: [Despliegue](deployment.md)
+- Despliegue y eficiencia operativa: [DPL](dpl.md)

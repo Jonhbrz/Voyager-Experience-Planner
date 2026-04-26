@@ -14,10 +14,15 @@ import {
 import { getTripDuration } from '@/utils/tripDates'
 import { formatSpentEUR, getTripTotal } from '@/utils/tripTotals'
 import { useLastVisitedTrip } from '@/composables/useLastVisitedTrip'
+import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 
 const tripsStore = useTripsStore()
+const authStore = useAuthStore()
+const toastStore = useToastStore()
 const router = useRouter()
 const { setLastVisitedTripId } = useLastVisitedTrip()
+const FREE_TRIP_LIMIT = 3
 
 const showCreateTrip = ref(false)
 const newTripName = ref('')
@@ -25,6 +30,10 @@ const newTripDescription = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const createTripFormError = ref<string | null>(null)
+const isUpgrading = ref(false)
+
+const isFreeUser = computed(() => authStore.user?.plan === 'free' && !authStore.isAdmin)
+const hasTripLimit = computed(() => isFreeUser.value && tripsStore.totalTrips >= FREE_TRIP_LIMIT)
 
 function toYmd(d: Date): string {
   const y = d.getFullYear()
@@ -35,6 +44,10 @@ function toYmd(d: Date): string {
 
 const openCreateTripPanel = () => {
   if (tripsStore.isLoading || tripsStore.isCreatingTrip) return
+  if (hasTripLimit.value) {
+    createTripFormError.value = `You have reached the Free plan limit (${FREE_TRIP_LIMIT} trips). Upgrade to Premium to create more.`
+    return
+  }
   createTripFormError.value = null
   if (!startDate.value || !endDate.value) {
     const today = new Date()
@@ -64,6 +77,10 @@ watch(startDate, (s) => {
 const submitCreateTrip = async () => {
   if (tripsStore.isLoading || tripsStore.isCreatingTrip) return
   createTripFormError.value = null
+  if (hasTripLimit.value) {
+    createTripFormError.value = `You have reached the Free plan limit (${FREE_TRIP_LIMIT} trips). Upgrade to Premium to create more.`
+    return
+  }
   const name = newTripName.value.trim()
   if (!name) return
   if (!startDate.value || !endDate.value) {
@@ -109,6 +126,20 @@ function nextActivityStatus(trip: Trip): 'empty' | 'no-pending' | 'has-next' {
   if (total === 0) return 'empty'
   if (!getNextFutureActivity(trip)) return 'no-pending'
   return 'has-next'
+}
+
+async function upgradePlan() {
+  if (isUpgrading.value || authStore.isPremium) return
+  isUpgrading.value = true
+  try {
+    const message = await authStore.upgradeToPremium()
+    createTripFormError.value = null
+    toastStore.push('success', message)
+  } catch {
+    toastStore.push('error', 'No se pudo actualizar el plan.')
+  } finally {
+    isUpgrading.value = false
+  }
 }
 
 onMounted(() => {
@@ -164,11 +195,21 @@ function tripProgress(trip: Trip) {
       <button
         type="button"
         class="btn-create"
-        :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip"
-        aria-label="Abrir formulario para crear un nuevo viaje"
+        :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip || hasTripLimit"
+        :aria-label="hasTripLimit ? 'Plan Free limitado a tres viajes' : 'Abrir formulario para crear un nuevo viaje'"
         @click="openCreateTripPanel"
       >
         Crear viaje
+      </button>
+    </div>
+
+    <div v-if="hasTripLimit && !showCreateTrip" class="limit-panel" role="alert">
+      <div>
+        <strong>You have reached the Free plan limit ({{ FREE_TRIP_LIMIT }} trips)</strong>
+        <p>Upgrade to Premium to create unlimited trips.</p>
+      </div>
+      <button type="button" class="btn-upgrade" :disabled="isUpgrading" @click="upgradePlan">
+        {{ isUpgrading ? 'Actualizando...' : 'Upgrade to Premium' }}
       </button>
     </div>
 
@@ -251,13 +292,13 @@ function tripProgress(trip: Trip) {
 
     <template v-else>
     <section class="dashboard-body" aria-labelledby="dashboard-main-heading">
-    <div class="dashboard-stats">
+    <div v-if="!isFreeUser" class="dashboard-stats">
       <p class="dashboard-stats-label"><span aria-hidden="true">🌍 </span>Días de viaje totales</p>
       <h2 v-if="totalDays > 0" class="dashboard-stats-value">{{ totalDays }}</h2>
       <p v-else class="dashboard-stats-empty">Aún no has planificado días de viaje ✈️</p>
     </div>
 
-    <div class="stats">
+    <div v-if="!isFreeUser" class="stats">
       <div class="stat-card card-hover">
         <h3>Total de viajes</h3>
         <p class="stat-value">{{ tripsStore.totalTrips }}</p>
@@ -319,6 +360,13 @@ function tripProgress(trip: Trip) {
 
 h1 {
   margin: 0;
+}
+
+.btn-upgrade {
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .btn-create {
@@ -410,6 +458,22 @@ h1 {
   margin: 0;
   font-size: 0.9rem;
   color: #b00020;
+}
+
+.limit-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: -6px 0 18px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #ffebee;
+  color: #b00020;
+}
+
+.limit-panel p {
+  margin: 4px 0 0;
 }
 
 .create-trip-actions {
@@ -699,6 +763,18 @@ h1 {
 :global(.dark) .create-trip-panel {
   border-color: var(--border);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+:global(.dark) .limit-panel {
+  background: #3e2723;
+  color: #ffcdd2;
+}
+
+@media (max-width: 720px) {
+  .limit-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 :global(.dark) .create-trip-field input,

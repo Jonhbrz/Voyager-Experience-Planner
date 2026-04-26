@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateTripRequest;
 use App\Http\Resources\TripResource;
 use App\Models\Day;
 use App\Models\Trip;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,13 @@ class TripController extends Controller
     //POST /api/trips
     public function store(StoreTripRequest $request)
     {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (! $user->isAdmin() && ! $user->isPremium() && $user->trips()->count() >= 3) {
+            abort(403, 'Free plan users can create up to 3 trips. Upgrade to Premium to create unlimited trips.');
+        }
+
         $trip = DB::transaction(function () use ($request) {
             $validated = $request->validated();
 

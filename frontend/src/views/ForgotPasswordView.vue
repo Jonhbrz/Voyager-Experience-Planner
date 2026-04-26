@@ -1,38 +1,34 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
-const route = useRoute()
-const router = useRouter()
 
 const email = ref('')
-const password = ref('')
+const statusMessage = ref<string | null>(null)
 const errorMessage = ref<string | null>(null)
 const isSubmitting = ref(false)
 
+function firstValidationError(e: unknown): string | null {
+  if (axios.isAxiosError(e) && e.response?.status === 422 && e.response.data?.errors) {
+    const errs = e.response.data.errors as Record<string, string[]>
+    return Object.values(errs).flat()[0] ?? null
+  }
+  if (axios.isAxiosError(e) && e.response?.data?.message) {
+    return String(e.response.data.message)
+  }
+  return null
+}
+
 async function submit() {
+  statusMessage.value = null
   errorMessage.value = null
   isSubmitting.value = true
   try {
-    await auth.login(email.value.trim().toLowerCase(), password.value)
-    const redirect = route.query.redirect
-    const path = typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/'
-    await router.replace(path)
+    statusMessage.value = await auth.requestPasswordReset(email.value.trim().toLowerCase())
   } catch (e) {
-    if (axios.isAxiosError(e) && e.response?.status === 422 && e.response.data?.errors) {
-      const errs = e.response.data.errors as Record<string, string[]>
-      const first = Object.values(errs).flat()[0]
-      errorMessage.value = first ?? 'No se pudo iniciar sesión.'
-      return
-    }
-    if (axios.isAxiosError(e) && e.response?.data?.message) {
-      errorMessage.value = String(e.response.data.message)
-      return
-    }
-    errorMessage.value = 'No se pudo iniciar sesión.'
+    errorMessage.value = firstValidationError(e) ?? 'No se pudo enviar el email de recuperación.'
   } finally {
     isSubmitting.value = false
   }
@@ -42,41 +38,29 @@ async function submit() {
 <template>
   <main id="main-content" class="auth-page" tabindex="-1">
     <div class="auth-card">
-      <h1>Iniciar sesión</h1>
-      <p class="hint">Voyager Experience Planner</p>
+      <h1>Recuperar contraseña</h1>
+      <p class="hint">Te enviaremos un enlace para crear una nueva contraseña.</p>
 
       <form class="form" @submit.prevent="submit">
         <label class="field">
           <span>Email</span>
           <input v-model="email" type="email" autocomplete="email" required :disabled="isSubmitting" />
         </label>
-        <label class="field">
-          <span>Contraseña</span>
-          <input
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            required
-            :disabled="isSubmitting"
-          />
-        </label>
 
+        <p v-if="statusMessage" class="success" role="status">
+          {{ statusMessage }}
+        </p>
         <p v-if="errorMessage" class="error" role="alert">
           {{ errorMessage }}
         </p>
 
         <button type="submit" class="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Entrando…' : 'Entrar' }}
+          {{ isSubmitting ? 'Enviando…' : 'Enviar enlace' }}
         </button>
       </form>
 
-      <p class="footer compact">
-        <RouterLink to="/forgot-password">¿Has olvidado tu contraseña?</RouterLink>
-      </p>
-
       <p class="footer">
-        ¿No tienes cuenta?
-        <RouterLink to="/register">Regístrate</RouterLink>
+        <RouterLink to="/login">Volver al login</RouterLink>
       </p>
     </div>
   </main>
@@ -94,7 +78,7 @@ async function submit() {
 
 .auth-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--card, #fff);
   border-radius: 16px;
   padding: 28px 26px;
@@ -112,15 +96,17 @@ h1 {
   opacity: 0.75;
 }
 
-.form {
+.form,
+.field {
   display: flex;
   flex-direction: column;
+}
+
+.form {
   gap: 16px;
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
   font-size: 0.88rem;
   font-weight: 600;
@@ -133,13 +119,22 @@ h1 {
   font-size: 1rem;
 }
 
+.success,
 .error {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.success {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.error {
   background: #ffebee;
   color: #b00020;
-  font-size: 0.92rem;
 }
 
 .submit {
@@ -168,10 +163,6 @@ h1 {
   font-size: 0.92rem;
 }
 
-.footer.compact {
-  margin-top: 14px;
-}
-
 .footer a {
   color: var(--primary);
   font-weight: 600;
@@ -186,6 +177,11 @@ h1 {
   background: var(--bg);
   border-color: var(--border);
   color: var(--text);
+}
+
+:global(.dark) .success {
+  background: #1b3a1e;
+  color: #c8e6c9;
 }
 
 :global(.dark) .error {

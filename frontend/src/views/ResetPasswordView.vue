@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
@@ -8,31 +8,48 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const email = ref('')
+const token = computed(() => (typeof route.query.token === 'string' ? route.query.token : ''))
+const hasValidResetLink = computed(() => token.value.length > 0)
+const email = ref(typeof route.query.email === 'string' ? route.query.email : '')
 const password = ref('')
+const passwordConfirmation = ref('')
+const statusMessage = ref<string | null>(null)
 const errorMessage = ref<string | null>(null)
 const isSubmitting = ref(false)
 
+function firstValidationError(e: unknown): string | null {
+  if (axios.isAxiosError(e) && e.response?.status === 422 && e.response.data?.errors) {
+    const errs = e.response.data.errors as Record<string, string[]>
+    return Object.values(errs).flat()[0] ?? null
+  }
+  if (axios.isAxiosError(e) && e.response?.data?.message) {
+    return String(e.response.data.message)
+  }
+  return null
+}
+
 async function submit() {
+  statusMessage.value = null
   errorMessage.value = null
+
+  if (!hasValidResetLink.value) {
+    errorMessage.value = 'El enlace de recuperación no es válido o ha caducado.'
+    return
+  }
+
   isSubmitting.value = true
   try {
-    await auth.login(email.value.trim().toLowerCase(), password.value)
-    const redirect = route.query.redirect
-    const path = typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/'
-    await router.replace(path)
+    statusMessage.value = await auth.resetPassword({
+      token: token.value,
+      email: email.value.trim().toLowerCase(),
+      password: password.value,
+      passwordConfirmation: passwordConfirmation.value,
+    })
+    setTimeout(() => {
+      void router.replace({ name: 'login' })
+    }, 1200)
   } catch (e) {
-    if (axios.isAxiosError(e) && e.response?.status === 422 && e.response.data?.errors) {
-      const errs = e.response.data.errors as Record<string, string[]>
-      const first = Object.values(errs).flat()[0]
-      errorMessage.value = first ?? 'No se pudo iniciar sesión.'
-      return
-    }
-    if (axios.isAxiosError(e) && e.response?.data?.message) {
-      errorMessage.value = String(e.response.data.message)
-      return
-    }
-    errorMessage.value = 'No se pudo iniciar sesión.'
+    errorMessage.value = firstValidationError(e) ?? 'No se pudo restablecer la contraseña.'
   } finally {
     isSubmitting.value = false
   }
@@ -42,41 +59,55 @@ async function submit() {
 <template>
   <main id="main-content" class="auth-page" tabindex="-1">
     <div class="auth-card">
-      <h1>Iniciar sesión</h1>
-      <p class="hint">Voyager Experience Planner</p>
+      <h1>Nueva contraseña</h1>
+      <p class="hint">Introduce una contraseña nueva para completar la recuperación.</p>
 
       <form class="form" @submit.prevent="submit">
+        <p v-if="!hasValidResetLink" class="error" role="alert">
+          El enlace de recuperación no contiene un token válido. Solicita un enlace nuevo.
+        </p>
+
         <label class="field">
           <span>Email</span>
           <input v-model="email" type="email" autocomplete="email" required :disabled="isSubmitting" />
         </label>
         <label class="field">
-          <span>Contraseña</span>
+          <span>Nueva contraseña</span>
           <input
             v-model="password"
             type="password"
-            autocomplete="current-password"
+            autocomplete="new-password"
             required
+            minlength="8"
+            :disabled="isSubmitting"
+          />
+        </label>
+        <label class="field">
+          <span>Confirmar contraseña</span>
+          <input
+            v-model="passwordConfirmation"
+            type="password"
+            autocomplete="new-password"
+            required
+            minlength="8"
             :disabled="isSubmitting"
           />
         </label>
 
+        <p v-if="statusMessage" class="success" role="status">
+          {{ statusMessage }}
+        </p>
         <p v-if="errorMessage" class="error" role="alert">
           {{ errorMessage }}
         </p>
 
-        <button type="submit" class="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Entrando…' : 'Entrar' }}
+        <button type="submit" class="submit" :disabled="isSubmitting || !hasValidResetLink">
+          {{ isSubmitting ? 'Guardando…' : 'Restablecer contraseña' }}
         </button>
       </form>
 
-      <p class="footer compact">
-        <RouterLink to="/forgot-password">¿Has olvidado tu contraseña?</RouterLink>
-      </p>
-
       <p class="footer">
-        ¿No tienes cuenta?
-        <RouterLink to="/register">Regístrate</RouterLink>
+        <RouterLink to="/forgot-password">Solicitar otro enlace</RouterLink>
       </p>
     </div>
   </main>
@@ -94,7 +125,7 @@ async function submit() {
 
 .auth-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--card, #fff);
   border-radius: 16px;
   padding: 28px 26px;
@@ -112,15 +143,17 @@ h1 {
   opacity: 0.75;
 }
 
-.form {
+.form,
+.field {
   display: flex;
   flex-direction: column;
+}
+
+.form {
   gap: 16px;
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
   font-size: 0.88rem;
   font-weight: 600;
@@ -133,13 +166,22 @@ h1 {
   font-size: 1rem;
 }
 
+.success,
 .error {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.success {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.error {
   background: #ffebee;
   color: #b00020;
-  font-size: 0.92rem;
 }
 
 .submit {
@@ -168,10 +210,6 @@ h1 {
   font-size: 0.92rem;
 }
 
-.footer.compact {
-  margin-top: 14px;
-}
-
 .footer a {
   color: var(--primary);
   font-weight: 600;
@@ -186,6 +224,11 @@ h1 {
   background: var(--bg);
   border-color: var(--border);
   color: var(--text);
+}
+
+:global(.dark) .success {
+  background: #1b3a1e;
+  color: #c8e6c9;
 }
 
 :global(.dark) .error {

@@ -10,6 +10,7 @@ const router = useRouter()
 const name = ref('')
 const email = ref('')
 const password = ref('')
+const passwordConfirmation = ref('')
 const errorMessage = ref<string | null>(null)
 const isSubmitting = ref(false)
 
@@ -17,7 +18,7 @@ async function submit() {
   errorMessage.value = null
   isSubmitting.value = true
   try {
-    await auth.register(name.value.trim(), email.value.trim(), password.value)
+    await auth.register(name.value.trim(), email.value.trim().toLowerCase(), password.value, passwordConfirmation.value)
     await router.replace('/')
   } catch (e) {
     if (axios.isAxiosError(e) && e.response?.status === 422 && e.response.data?.errors) {
@@ -60,12 +61,23 @@ async function submit() {
             type="password"
             autocomplete="new-password"
             required
-            minlength="6"
+            minlength="8"
             :disabled="isSubmitting"
             aria-describedby="register-pw-hint"
           />
         </label>
-        <p id="register-pw-hint" class="pw-hint">Mínimo 6 caracteres.</p>
+        <p id="register-pw-hint" class="pw-hint">Mínimo 8 caracteres.</p>
+        <label class="field">
+          <span>Confirmar contraseña</span>
+          <input
+            v-model="passwordConfirmation"
+            type="password"
+            autocomplete="new-password"
+            required
+            minlength="8"
+            :disabled="isSubmitting"
+          />
+        </label>
 
         <p v-if="errorMessage" class="error" role="alert">
           {{ errorMessage }}

@@ -8,13 +8,33 @@ export interface AuthUser {
   id: number
   name: string
   email: string
+  role: 'superadmin' | 'user'
+  plan: 'free' | 'premium'
+}
+
+function normalizeUser(value: Partial<AuthUser> | null): AuthUser | null {
+  if (!value?.id || !value.name || !value.email) return null
+  return {
+    id: value.id,
+    name: value.name,
+    email: value.email,
+    role: value.role === 'superadmin' ? 'superadmin' : 'user',
+    plan: value.plan === 'premium' ? 'premium' : 'free',
+  }
+}
+
+function warnIfMissingAccessFields(source: string, value: Partial<AuthUser> | null) {
+  if (!import.meta.env.DEV || !value) return
+  if (!value.role || !value.plan) {
+    console.warn(`[auth] ${source} user payload is missing role or plan`, value)
+  }
 }
 
 function readUserFromStorage(): AuthUser | null {
   const raw = localStorage.getItem(AUTH_USER_KEY)
   if (!raw) return null
   try {
-    return JSON.parse(raw) as AuthUser
+    return normalizeUser(JSON.parse(raw) as Partial<AuthUser>)
   } catch {
     return null
   }
@@ -25,6 +45,8 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(readUserFromStorage())
 
   const isAuthenticated = computed(() => Boolean(token.value))
+  const isAdmin = computed(() => user.value?.role === 'superadmin')
+  const isPremium = computed(() => user.value?.plan === 'premium')
 
   function persist() {
     if (token.value) {
@@ -41,7 +63,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   function setSession(payload: { user: AuthUser; token: string }) {
     token.value = payload.token
-    user.value = payload.user
+    warnIfMissingAccessFields('setSession', payload.user)
+    user.value = normalizeUser(payload.user)
     persist()
   }
 
@@ -57,10 +80,78 @@ export const useAuthStore = defineStore('auth', () => {
     setSession({ user: u, token: t })
   }
 
-  async function register(name: string, email: string, password: string) {
-    const res = await api.post('/register', { name, email, password })
+  async function register(name: string, email: string, password: string, passwordConfirmation: string) {
+    const res = await api.post('/register', {
+      name,
+      email,
+      password,
+      password_confirmation: passwordConfirmation,
+    })
     const { user: u, token: t } = res.data.data as { user: AuthUser; token: string }
     setSession({ user: u, token: t })
+  }
+
+  async function requestPasswordReset(email: string): Promise<string> {
+    const res = await api.post('/forgot-password', { email })
+    return String(res.data.data?.message ?? 'Revisa tu email para restablecer la contraseña.')
+  }
+
+  async function resetPassword(payload: {
+    token: string
+    email: string
+    password: string
+    passwordConfirmation: string
+  }): Promise<string> {
+    const res = await api.post('/reset-password', {
+      token: payload.token,
+      email: payload.email,
+      password: payload.password,
+      password_confirmation: payload.passwordConfirmation,
+    })
+    return String(res.data.data?.message ?? 'Contraseña actualizada.')
+  }
+
+  async function fetchProfile() {
+    const res = await api.get('/profile')
+    const rawUser = res.data.data.user as Partial<AuthUser>
+    warnIfMissingAccessFields('fetchProfile', rawUser)
+    const u = normalizeUser(rawUser)
+    user.value = u
+    persist()
+    return u
+  }
+
+  async function updateProfile(name: string, email: string) {
+    const res = await api.patch('/profile', { name, email })
+    const rawUser = res.data.data.user as Partial<AuthUser>
+    warnIfMissingAccessFields('updateProfile', rawUser)
+    const u = normalizeUser(rawUser)
+    user.value = u
+    persist()
+    return String(res.data.data?.message ?? 'Perfil actualizado.')
+  }
+
+  async function upgradeToPremium() {
+    const res = await api.post('/upgrade')
+    const rawUser = res.data.data.user as Partial<AuthUser>
+    warnIfMissingAccessFields('upgradeToPremium', rawUser)
+    const u = normalizeUser(rawUser)
+    user.value = u
+    persist()
+    return String(res.data.data?.message ?? 'Plan actualizado a Premium.')
+  }
+
+  async function updatePassword(
+    currentPassword: string,
+    password: string,
+    passwordConfirmation: string
+  ) {
+    const res = await api.put('/profile/password', {
+      current_password: currentPassword,
+      password,
+      password_confirmation: passwordConfirmation,
+    })
+    return String(res.data.data?.message ?? 'Contraseña actualizada.')
   }
 
   async function logout() {
@@ -84,8 +175,16 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     user,
     isAuthenticated,
+    isAdmin,
+    isPremium,
     login,
     register,
+    requestPasswordReset,
+    resetPassword,
+    fetchProfile,
+    updateProfile,
+    updatePassword,
+    upgradeToPremium,
     logout,
     clearSession,
     persist,

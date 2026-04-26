@@ -1,8 +1,6 @@
 # Voyager Experience Planner
 
-Bienvenido a la documentación del proyecto **PRW-VEP** (*Voyager Experience Planner*): una aplicación web para planificar viajes por días, con actividades, transportes, estancias y seguimiento de gastos estimados.
-
-Esta documentación está preparada para generarse con **[MkDocs](https://www.mkdocs.org/)** y está organizada en bloques claros para **evaluación académica**, **mantenimiento del equipo** y **usuarios finales**.
+Documentación final del proyecto **PRW-VEP** (*Voyager Experience Planner*), preparada para una defensa académica. La aplicación permite planificar viajes por días, gestionar actividades, transportes, estancias, planes de usuario e invoices simuladas.
 
 ---
 
@@ -10,14 +8,12 @@ Esta documentación está preparada para generarse con **[MkDocs](https://www.mk
 
 | Sección | Audiencia | Contenido |
 |--------|-----------|-----------|
-| **[Uso de la aplicación](usage.md)** | Usuario final | Registro, viajes, días, actividades, transportes, estancias, gastos y panel principal |
-| **[Entorno e instalación](setup.md)** | Desarrolladores | Requisitos, Docker, variables de entorno, migraciones |
-| **[Control de versiones](version-control.md)** | Desarrolladores / evaluación | Git, GitHub, ramas, commits, changelog, utilidad en el proyecto |
-| **[Arquitectura](architecture.md)** | Desarrolladores / revisores | Vue, Laravel, PostgreSQL, NGINX y flujo de peticiones |
-| **[Frontend](frontend.md)** | Desarrolladores | Vue 3, Pinia, composables, estructura de carpetas |
-| **[Backend](backend.md)** | Desarrolladores | Laravel, API REST, validación, Sanctum |
-| **[Base de datos](database.md)** | Desarrolladores | Modelo relacional, tablas, campo `price` |
-| **[Despliegue](deployment.md)** | DevOps / desarrolladores | `docker-compose`, NGINX, flujo de despliegue |
+| **[DSW](dsw.md)** | Evaluación | Backend Laravel, API, Sanctum, lógica de negocio y base de datos |
+| **[DEW](dew.md)** | Evaluación | Frontend Vue SPA, estado, rutas, componentes e interacción con API |
+| **[DPL](dpl.md)** | Evaluación | Despliegue, Docker, Git, ramas, commits y build |
+| **[DOR](dor.md)** | Evaluación | Diseño responsive, accesibilidad, estilos y usabilidad |
+| **[Sistema de Gestión (SSG)](ssg.md)** | Evaluación / negocio | Gestión de usuarios, formularios y paneles de control |
+| **[Uso de la aplicación](usage.md)** | Usuario final | Registro, viajes, días, actividades, transportes, estancias y gastos |
 | **[Empleabilidad (IPW)](ipw.md)** | Tutoría / negocio | Mercado, marketing, sostenibilidad económica-social-ambiental, normativa |
 | **[Sostenibilidad (SOJ)](soj.md)** | Tutoría / ODS | ODS vinculados, impactos, evaluación de materialidad |
 
@@ -32,9 +28,6 @@ Esta documentación está preparada para generarse con **[MkDocs](https://www.mk
 
 ---
 
-## Convenciones
+## Estructura Final
 
-- Las rutas de API se indican respecto al prefijo `/api`.
-- Los fragmentos de código o comandos asumen raíz del repositorio salvo que se indique otra carpeta.
-
-Si detectas desalineación entre esta documentación y el código, prima el comportamiento del repositorio y actualiza la documentación en la misma iteración.
+Solo se mantienen documentos relevantes para presentación, evaluación y uso. El contenido técnico general se ha consolidado en DSW, DEW y DPL para evitar duplicidades.

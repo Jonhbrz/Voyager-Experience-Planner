@@ -1,4 +1,5 @@
 import type { Activity, Day, Stay, Transport, Trip } from '@/types/trip'
+import { formatCurrencyAmount } from '@/utils/formatters'
 
 /** Precio no negativo y con precisión de céntimos (evita NaN / strings raros de la API). */
 export function clampPrice(value: unknown): number {
@@ -8,7 +9,7 @@ export function clampPrice(value: unknown): number {
 }
 
 export function formatSpentEUR(total: number): string {
-  return `€${clampPrice(total).toFixed(2)}`
+  return formatCurrencyAmount(clampPrice(total))
 }
 
 export function getActivitiesTotal(activities: Activity[] | undefined | null): number {

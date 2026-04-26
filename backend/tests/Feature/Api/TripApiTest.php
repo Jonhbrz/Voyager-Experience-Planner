@@ -88,6 +88,53 @@ class TripApiTest extends TestCase
         ]);
     }
 
+    public function test_free_user_cannot_create_more_than_three_trips(): void
+    {
+        $user = User::factory()->create(['plan' => User::PLAN_FREE]);
+        $this->createTripRows($user, 3);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/trips', [
+            'name' => 'Cuarto viaje',
+            'description' => '',
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-10-02',
+        ])
+            ->assertForbidden()
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_premium_user_can_create_more_than_three_trips(): void
+    {
+        $user = User::factory()->create(['plan' => User::PLAN_PREMIUM]);
+        $this->createTripRows($user, 3);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/trips', [
+            'name' => 'Cuarto viaje',
+            'description' => '',
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-10-02',
+        ])->assertCreated();
+    }
+
+    public function test_superadmin_can_create_more_than_three_trips_on_free_plan(): void
+    {
+        $user = User::factory()->create([
+            'role' => User::ROLE_SUPERADMIN,
+            'plan' => User::PLAN_FREE,
+        ]);
+        $this->createTripRows($user, 3);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/trips', [
+            'name' => 'Cuarto viaje',
+            'description' => '',
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-10-02',
+        ])->assertCreated();
+    }
+
     public function test_delete_trips_removes_trip_for_owner(): void
     {
         $user = User::factory()->create();
@@ -170,5 +217,18 @@ class TripApiTest extends TestCase
         ])
             ->assertUnprocessable()
             ->assertJsonPath('success', false);
+    }
+
+    private function createTripRows(User $user, int $count): void
+    {
+        for ($i = 1; $i <= $count; $i++) {
+            Trip::query()->create([
+                'user_id' => $user->id,
+                'name' => "Viaje {$i}",
+                'description' => null,
+                'start_date' => '2026-09-01',
+                'end_date' => '2026-09-02',
+            ]);
+        }
     }
 }

@@ -3,7 +3,7 @@
     <TripListItem v-for="trip in trips" :key="trip.id" :trip="trip" @open="emit('open', $event)" />
   </ul>
   <p v-else class="empty-dash">
-    Aún no hay viajes. Crea uno para empezar <span aria-hidden="true">🚀</span>
+    No trips created yet
   </p>
 </template>
 
@@ -49,7 +49,12 @@ const emit = defineEmits<{
 .empty-dash {
   color: var(--text-light);
   font-size: 1rem;
-  margin-top: 8px;
+  margin: 12px 0 0;
+  padding: 24px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--card);
 }
 
 :global(.dark) .empty-dash {

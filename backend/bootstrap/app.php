@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->append(HandleCors::class);
+        $middleware->alias([
+            'superadmin' => \App\Http\Middleware\EnsureSuperadmin::class,
+        ]);
 
         // Detrás del Nginx del stack Docker (o otro reverse proxy)
         $proxies = env('TRUSTED_PROXIES', '172.16.0.0/12,10.0.0.0/8,192.168.0.0/16');

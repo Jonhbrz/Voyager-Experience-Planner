@@ -1,22 +1,44 @@
 <?php
 
 use App\Http\Controllers\Api\ActivityController;
-use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\DayController;
 use App\Http\Controllers\Api\StayController;
+use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\TransportController;
 use App\Http\Controllers\Api\TripController;
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\NewPasswordController;
+use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\ProfileController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::options('{any}', function () {
     return response()->json([], 200);
 })->where('any', '.*');
 
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+Route::post('/register', [RegisteredUserController::class, 'store']);
+Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:5,1');
+Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])->middleware('guest')->name('password.email');
+Route::post('/reset-password', [NewPasswordController::class, 'store'])->middleware('guest')->name('password.store');
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/user', fn (Request $request) => $request->user());
+    Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
+    Route::get('/profile', [ProfileController::class, 'show']);
+    Route::patch('/profile', [ProfileController::class, 'update']);
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
+    Route::post('/upgrade', [SubscriptionController::class, 'upgrade'])->middleware('throttle:5,1');
+
+    Route::middleware('superadmin')->prefix('admin')->group(function () {
+        Route::get('/stats', [AdminController::class, 'stats']);
+        Route::get('/users', [AdminController::class, 'users']);
+        Route::patch('/users/{user}/plan', [AdminController::class, 'updateUserPlan']);
+        Route::delete('/users/{user}', [AdminController::class, 'deleteUser']);
+        Route::get('/invoices', [AdminController::class, 'invoices']);
+    });
 
     /*
      * Recursos REST (apiResource): GET/POST collection, GET/PUT/PATCH/DELETE por id.

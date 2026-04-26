@@ -22,7 +22,18 @@
             <span class="nav-dot" />
           </span>
         </span>
-        <span v-if="authStore.user" class="user-label">{{ authStore.user.name }}</span>
+        <router-link v-if="authStore.user" to="/profile" class="user-label profile-link">
+          {{ authStore.user.name }}
+        </router-link>
+        <span v-if="authStore.isAdmin" class="role-badge role-badge--admin">
+          👑 Superadmin
+        </span>
+        <span v-if="authStore.user" class="plan-badge" :class="`plan-badge--${authStore.user.plan}`">
+          {{ authStore.user.plan === 'premium' ? '💎 Premium' : '🆓 Free' }}
+        </span>
+        <router-link v-if="authStore.user?.role === 'superadmin'" to="/admin" class="admin-link">
+          Admin
+        </router-link>
         <button type="button" class="logout-btn" aria-label="Cerrar sesión" @click="onLogout">
           Salir
         </button>
@@ -79,6 +90,7 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTripsStore } from '@/stores/trips'
 import { useAuthStore } from '@/stores/auth'
@@ -93,6 +105,12 @@ const authStore = useAuthStore()
 const layoutStore = useLayoutStore()
 const { isDark, toggleDark } = useTheme()
 const { setLastVisitedTripId } = useLastVisitedTrip()
+
+onMounted(() => {
+  if (authStore.token) {
+    void authStore.fetchProfile().catch(() => undefined)
+  }
+})
 
 const onLogout = () => {
   void authStore.logout()
@@ -210,6 +228,49 @@ const goToTrip = (id: number) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.profile-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.profile-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.role-badge,
+.plan-badge,
+.admin-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.plan-badge--free {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.plan-badge--premium,
+.role-badge--admin,
+.admin-link {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+.admin-link {
+  text-decoration: none;
+}
+
+.admin-link:hover {
+  background: #fde68a;
 }
 
 .logout-btn {
