@@ -3,6 +3,7 @@ import { getActivePinia } from 'pinia'
 import { computed, ref } from 'vue'
 import api from '@/services/api'
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from '@/constants/authStorage'
+import type { PaymentPayload } from '@/types/payment'
 
 export interface AuthUser {
   id: number
@@ -141,10 +142,7 @@ export const useAuthStore = defineStore('auth', () => {
     return String(res.data.data?.message ?? 'Plan actualizado a Premium.')
   }
 
-  async function simulatePremiumPayment(payload: {
-    method: 'card' | 'transfer'
-    payment_data: Record<string, string>
-  }) {
+  async function simulatePremiumPayment(payload: PaymentPayload) {
     const res = await api.post('/payment/simulate', payload)
     const rawUser = res.data.data.user as Partial<AuthUser>
     warnIfMissingAccessFields('simulatePremiumPayment', rawUser)
