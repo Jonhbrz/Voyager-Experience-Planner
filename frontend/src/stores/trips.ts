@@ -205,11 +205,23 @@ export const useTripsStore = defineStore('trips', {
 
     setError(error: unknown, fallback: string) {
       if (axios.isAxiosError(error)) {
-        if (error.response?.data?.message) {
-          this.errorMessage = error.response.data.message
+        const status = error.response?.status
+        const data = error.response?.data as {
+          errors?: Record<string, string[]>
+          message?: string
+        } | undefined
+        if (status === 422 && data?.errors) {
+          const msgs = Object.values(data.errors).flat().filter(Boolean)
+          if (msgs.length) {
+            this.errorMessage = String(msgs[0])
+            return
+          }
+        }
+        if (data?.message) {
+          this.errorMessage = String(data.message)
           return
         }
-        if (error.request) {
+        if (error.request && !error.response) {
           this.errorMessage = 'No se pudo conectar con el servidor.'
           return
         }
@@ -301,12 +313,13 @@ export const useTripsStore = defineStore('trips', {
             }
             const res = await api.post('/trips', payload)
             const raw = res.data.data as Trip
+            const payloadMsg = res.data as { message?: string }
             store.trips = [...store.trips, store.normalizeTripDays(raw)]
-            store.successMessage = 'Viaje creado correctamente.'
+            store.successMessage = payloadMsg.message ?? 'Viaje creado correctamente.'
             scheduleMessageAutoClear(store)
             resolve()
           } catch (error) {
-            store.setError(error, 'No se pudo crear el viaje.')
+            store.setError(error, 'Error al crear el viaje.')
             scheduleMessageAutoClear(store)
             reject(error)
             throw error

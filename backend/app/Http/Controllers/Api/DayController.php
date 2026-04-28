@@ -8,6 +8,7 @@ use App\Http\Requests\StoreDayRequest;
 use App\Http\Requests\UpdateDayRequest;
 use App\Http\Resources\DayResource;
 use App\Models\Day;
+use App\Support\ApiCache;
 use Illuminate\Http\Request;
 
 class DayController extends Controller
@@ -77,6 +78,7 @@ class DayController extends Controller
             'transports:id,day_id,from,to,type,duration,notes',
             'stays:id,day_id,name,location,check_in,check_out,notes',
         ]);
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new DayResource($day), 201);
     }
@@ -90,6 +92,7 @@ class DayController extends Controller
             'transports:id,day_id,from,to,type,duration,notes',
             'stays:id,day_id,name,location,check_in,check_out,notes',
         ]);
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new DayResource($day), 200);
     }
@@ -98,6 +101,7 @@ class DayController extends Controller
     {
         $day = $this->findDayForUserOrAbort($request, (int) $id);
         $day->delete();
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return response()->noContent();
     }

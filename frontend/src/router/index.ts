@@ -1,6 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import DashboardView from '@/views/DashboardView.vue'
-import TripView from '@/views/TripView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
@@ -33,13 +31,13 @@ const router = createRouter({
     {
       path: '/',
       name: 'dashboard',
-      component: DashboardView,
+      component: () => import('@/views/DashboardView.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/trip/:id',
       name: 'trip',
-      component: TripView,
+      component: () => import('@/views/TripView.vue'),
       meta: { requiresAuth: true },
     },
     {
@@ -62,10 +60,11 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth === true && !auth.token) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.requiresAuth === true && auth.token && !auth.user) {
-    await auth.fetchProfile().catch(() => undefined)
-  }
-  if (to.meta.requiresAdmin === true && auth.token) {
+  if (
+    to.meta.requiresAuth === true &&
+    auth.token &&
+    (!auth.user || to.meta.requiresAdmin === true)
+  ) {
     await auth.fetchProfile().catch(() => undefined)
   }
   if (to.meta.requiresAdmin === true && auth.user?.role !== 'superadmin') {

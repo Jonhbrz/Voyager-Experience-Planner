@@ -2,35 +2,20 @@
 import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'
 import MainLayout from '@/layouts/MainLayout.vue'
-import api from '@/services/api'
 import { useAuthStore, type AuthUser } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import { formatCurrency } from '@/utils/formatters'
-
-interface AdminUser extends AuthUser {
-  created_at: string
-  trips_count: number
-}
-
-interface Invoice {
-  id: number
-  amount: number
-  plan: 'premium' | 'free'
-  created_at: string
-  user?: {
-    id: number
-    name: string
-    email: string
-  }
-}
-
-interface AdminStats {
-  total_users: number
-  free_users: number
-  premium_users: number
-  total_trips: number
-  total_revenue: number
-}
+import {
+  deleteAdminUser,
+  downloadInvoicePdf,
+  fetchAdminInvoices,
+  fetchAdminStats,
+  fetchAdminUsers,
+  updateAdminUserPlan,
+  type AdminStats,
+  type AdminUser,
+  type Invoice,
+} from '@/services/admin'
 
 const authStore = useAuthStore()
 const toast = useToastStore()
@@ -41,6 +26,7 @@ const invoices = ref<Invoice[]>([])
 const selectedInvoice = ref<Invoice | null>(null)
 const isLoading = ref(false)
 const processingUserId = ref<number | null>(null)
+const pdfDownloadingId = ref<number | null>(null)
 const errorMessage = ref<string | null>(null)
 
 const sortedUsers = computed(() => [...users.value].sort((a, b) => a.name.localeCompare(b.name, 'es')))
@@ -61,32 +47,32 @@ function formatDate(value: string): string {
 
 const statCards = computed(() => [
   { label: 'Usuarios', value: stats.value?.total_users ?? 0 },
-  { label: 'Free', value: stats.value?.free_users ?? 0 },
-  { label: 'Premium', value: stats.value?.premium_users ?? 0 },
+  { label: 'free', value: stats.value?.free_users ?? 0 },
+  { label: 'premium', value: stats.value?.premium_users ?? 0 },
   { label: 'Viajes', value: stats.value?.total_trips ?? 0 },
-  { label: 'Revenue', value: formatCurrency(stats.value?.total_revenue ?? 0) },
+  { label: 'Ingresos', value: formatCurrency(stats.value?.total_revenue ?? 0) },
 ])
 
 function roleLabel(role: AuthUser['role']): string {
-  return role === 'superadmin' ? '👑 Superadmin' : 'User'
+  return role === 'superadmin' ? '👑 superadmin' : 'Usuario'
 }
 
 function planLabel(plan: AuthUser['plan']): string {
-  return plan === 'premium' ? '💎 Premium' : '🆓 Free'
+  return plan === 'premium' ? '💎 premium' : '🆓 free'
 }
 
 async function loadAdminData() {
   isLoading.value = true
   errorMessage.value = null
   try {
-    const [statsRes, usersRes, invoicesRes] = await Promise.all([
-      api.get('/admin/stats'),
-      api.get('/admin/users'),
-      api.get('/admin/invoices'),
+    const [statsData, usersData, invoicesData] = await Promise.all([
+      fetchAdminStats(),
+      fetchAdminUsers(),
+      fetchAdminInvoices(),
     ])
-    stats.value = statsRes.data.data.stats as AdminStats
-    users.value = usersRes.data.data.users as AdminUser[]
-    invoices.value = invoicesRes.data.data.invoices as Invoice[]
+    stats.value = statsData
+    users.value = usersData
+    invoices.value = invoicesData
   } catch (error) {
     errorMessage.value = apiError(error, 'No se pudo cargar el panel de administración.')
   } finally {
@@ -102,15 +88,27 @@ function closeInvoice() {
   selectedInvoice.value = null
 }
 
+async function downloadPdf(invoice: Invoice) {
+  pdfDownloadingId.value = invoice.id
+  errorMessage.value = null
+  try {
+    await downloadInvoicePdf(invoice.id)
+    toast.push('success', 'PDF descargado.')
+  } catch (error) {
+    errorMessage.value = apiError(error, 'No se pudo descargar el PDF.')
+  } finally {
+    pdfDownloadingId.value = null
+  }
+}
+
 async function updatePlan(user: AdminUser, plan: AdminUser['plan']) {
   if (user.plan === plan) return
   processingUserId.value = user.id
   errorMessage.value = null
   try {
-    const res = await api.patch(`/admin/users/${user.id}/plan`, { plan })
-    const updated = res.data.data.user as AuthUser
+    const { user: updated, message } = await updateAdminUserPlan(user.id, plan)
     user.plan = updated.plan
-    toast.push('success', res.data.data?.message ?? 'Plan actualizado.')
+    toast.push('success', message)
     if (authStore.user?.id === user.id) {
       await authStore.fetchProfile()
     }
@@ -136,9 +134,9 @@ async function deleteUser(user: AdminUser) {
   processingUserId.value = user.id
   errorMessage.value = null
   try {
-    const res = await api.delete(`/admin/users/${user.id}`)
+    const message = await deleteAdminUser(user.id)
     users.value = users.value.filter((u) => u.id !== user.id)
-    toast.push('success', res.data.data?.message ?? 'Usuario eliminado.')
+    toast.push('success', message)
   } catch (error) {
     errorMessage.value = apiError(error, 'No se pudo eliminar el usuario.')
   } finally {
@@ -157,10 +155,10 @@ onMounted(() => {
       <div class="admin-header">
         <div>
           <h1 id="admin-title">Panel Admin</h1>
-          <p>Gestiona usuarios, planes e invoices del sistema.</p>
+          <p>Gestiona usuarios, planes y facturas.</p>
         </div>
         <button type="button" class="refresh-btn" :disabled="isLoading" @click="loadAdminData">
-          {{ isLoading ? 'Cargando...' : 'Actualizar' }}
+          {{ isLoading ? 'Cargando…' : 'Actualizar' }}
         </button>
       </div>
 
@@ -222,7 +220,7 @@ onMounted(() => {
                 </td>
               </tr>
               <tr v-if="!sortedUsers.length && !isLoading">
-                <td colspan="6" class="empty-row">No users found</td>
+                <td colspan="6" class="empty-row">No hay usuarios</td>
               </tr>
             </tbody>
           </table>
@@ -230,7 +228,7 @@ onMounted(() => {
       </section>
 
       <section class="admin-card" aria-labelledby="admin-invoices-title">
-        <h2 id="admin-invoices-title">Invoices</h2>
+        <h2 id="admin-invoices-title">Facturas</h2>
         <div class="table-wrap">
           <table>
             <thead>
@@ -251,13 +249,23 @@ onMounted(() => {
                 <td>{{ formatCurrency(invoice.amount) }}</td>
                 <td>{{ formatDate(invoice.created_at) }}</td>
                 <td>
-                  <button type="button" class="secondary-btn" @click="viewInvoice(invoice)">
-                    View Invoice
-                  </button>
+                  <div class="invoice-actions">
+                    <button
+                      type="button"
+                      class="secondary-btn"
+                      :disabled="pdfDownloadingId === invoice.id"
+                      @click="downloadPdf(invoice)"
+                    >
+                      {{ pdfDownloadingId === invoice.id ? '…' : 'Descargar PDF' }}
+                    </button>
+                    <button type="button" class="secondary-btn" @click="viewInvoice(invoice)">
+                      Ver factura
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="!invoices.length && !isLoading">
-                <td colspan="6" class="empty-row">No invoices available yet</td>
+                <td colspan="6" class="empty-row">Aún no hay facturas</td>
               </tr>
             </tbody>
           </table>
@@ -275,24 +283,24 @@ onMounted(() => {
         >
           <section class="invoice-modal">
             <div class="modal-head">
-              <h2 id="invoice-title">Invoice #{{ selectedInvoice.id }}</h2>
-              <button type="button" class="modal-close" aria-label="Cerrar invoice" @click="closeInvoice">×</button>
+              <h2 id="invoice-title">Factura #{{ selectedInvoice.id }}</h2>
+              <button type="button" class="modal-close" aria-label="Cerrar factura" @click="closeInvoice">×</button>
             </div>
             <dl class="invoice-details">
               <div>
-                <dt>User email</dt>
+                <dt>Email</dt>
                 <dd>{{ selectedInvoice.user?.email ?? '-' }}</dd>
               </div>
               <div>
-                <dt>Plan purchased</dt>
+                <dt>Plan</dt>
                 <dd>{{ planLabel(selectedInvoice.plan) }}</dd>
               </div>
               <div>
-                <dt>Amount</dt>
+                <dt>Importe</dt>
                 <dd>{{ formatCurrency(selectedInvoice.amount) }}</dd>
               </div>
               <div>
-                <dt>Date</dt>
+                <dt>Fecha</dt>
                 <dd>{{ formatDate(selectedInvoice.created_at) }}</dd>
               </div>
             </dl>
@@ -458,6 +466,18 @@ select {
 
 .secondary-btn:hover:not(:disabled) {
   background: var(--activity);
+}
+
+.secondary-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.invoice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .danger-btn:hover:not(:disabled) {

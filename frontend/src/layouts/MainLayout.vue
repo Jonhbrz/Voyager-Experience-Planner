@@ -26,14 +26,20 @@
           {{ authStore.user.name }}
         </router-link>
         <span v-if="authStore.isAdmin" class="role-badge role-badge--admin">
-          👑 Superadmin
+          👑 superadmin
         </span>
         <span v-if="authStore.user" class="plan-badge" :class="`plan-badge--${authStore.user.plan}`">
-          {{ authStore.user.plan === 'premium' ? '💎 Premium' : '🆓 Free' }}
+          {{ authStore.user.plan === 'premium' ? '💎 premium' : '🆓 free' }}
         </span>
-        <router-link v-if="authStore.user?.role === 'superadmin'" to="/admin" class="admin-link">
-          Admin
-        </router-link>
+        <button
+          v-if="authStore.user?.role === 'superadmin'"
+          type="button"
+          class="admin-link"
+          :disabled="adminNavigating"
+          @click="goToAdmin"
+        >
+          {{ adminNavigating ? '…' : 'Admin' }}
+        </button>
         <button type="button" class="logout-btn" aria-label="Cerrar sesión" @click="onLogout">
           Salir
         </button>
@@ -90,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTripsStore } from '@/stores/trips'
 import { useAuthStore } from '@/stores/auth'
@@ -105,6 +111,19 @@ const authStore = useAuthStore()
 const layoutStore = useLayoutStore()
 const { isDark, toggleDark } = useTheme()
 const { setLastVisitedTripId } = useLastVisitedTrip()
+
+const adminNavigating = ref(false)
+
+async function goToAdmin() {
+  if (adminNavigating.value) return
+  adminNavigating.value = true
+  try {
+    await authStore.fetchProfile().catch(() => undefined)
+    await router.push({ name: 'admin' })
+  } finally {
+    adminNavigating.value = false
+  }
+}
 
 onMounted(() => {
   if (authStore.token) {
@@ -271,6 +290,11 @@ const goToTrip = (id: number) => {
 
 .admin-link:hover {
   background: #fde68a;
+}
+
+.admin-link:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .logout-btn {

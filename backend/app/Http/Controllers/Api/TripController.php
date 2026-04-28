@@ -10,68 +10,77 @@ use App\Http\Resources\TripResource;
 use App\Models\Day;
 use App\Models\Trip;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use App\Support\ApiCache;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class TripController extends Controller
 {
     use AuthorizesOwnedApiResources;
 
+    private const TRIP_RELATIONS = [
+        'days:id,trip_id,title,order',
+        'days.activities:id,day_id,title,order,start_time,end_time,completed,price',
+        'days.transports:id,day_id,from,to,type,price,duration,notes',
+        'days.stays:id,day_id,name,location,price,check_in,check_out,notes',
+    ];
+
     // GET /api/trips
     public function index(Request $request)
     {
+        $userId = (int) $request->user()->id;
         $perPage = (int) $request->query('per_page', 0);
-        $query = Trip::query()
-            ->where('user_id', $request->user()->id)
-            ->select(['id', 'user_id', 'name', 'description', 'start_date', 'end_date'])
-            ->with([
-                'days:id,trip_id,title,order',
-                'days.activities:id,day_id,title,order,start_time,end_time,completed,price',
-                'days.transports:id,day_id,from,to,type,price,duration,notes',
-                'days.stays:id,day_id,name,location,price,check_in,check_out,notes',
-            ])
-            ->latest();
 
-        if ($perPage > 0) {
-            $trips = $query->paginate($perPage);
-        } else {
-            $trips = $query->get();
+        if ($perPage === 0) {
+            $trips = Cache::remember(ApiCache::userTripsKey($userId), ApiCache::SHORT_TTL_SECONDS, function () use ($request, $userId) {
+                return TripResource::collection($this->tripIndexQuery($userId)->get())->resolve($request);
+            });
+
+            return $this->successResponse($trips, 200);
         }
 
+        $trips = $this->tripIndexQuery($userId)->paginate($perPage);
+
         return $this->successResponse(TripResource::collection($trips), 200);
+    }
+
+    private function tripIndexQuery(int $userId)
+    {
+        $query = Trip::query()
+            ->where('user_id', $userId)
+            ->select(['id', 'user_id', 'name', 'description', 'start_date', 'end_date'])
+            ->with(self::TRIP_RELATIONS)
+            ->latest();
+
+        return $query;
     }
 
     // GET /api/trips/{id}
     public function show(Request $request, $id)
     {
         $trip = $this->findTripForUserOrAbort($request, (int) $id);
-        $trip->load([
-            'days:id,trip_id,title,order',
-            'days.activities:id,day_id,title,order,start_time,end_time,completed,price',
-            'days.transports:id,day_id,from,to,type,price,duration,notes',
-            'days.stays:id,day_id,name,location,price,check_in,check_out,notes',
-        ]);
+        $trip->load(self::TRIP_RELATIONS);
 
         return $this->successResponse(new TripResource($trip), 200);
     }
 
     //POST /api/trips
-    public function store(StoreTripRequest $request)
+    public function store(StoreTripRequest $request): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        if (! $user->isAdmin() && ! $user->isPremium() && $user->trips()->count() >= 3) {
-            abort(403, 'Free plan users can create up to 3 trips. Upgrade to Premium to create unlimited trips.');
+        $tripsCount = Trip::query()->where('user_id', $user->id)->count();
+
+        if (! $user->isAdmin() && ! $user->isPremium() && $tripsCount >= 3) {
+            abort(403, 'Has alcanzado el límite de viajes del plan Free');
         }
 
         $trip = DB::transaction(function () use ($request) {
             $validated = $request->validated();
-
-            if (empty($validated['start_date']) || empty($validated['end_date'])) {
-                abort(422, 'Dates are required');
-            }
 
             $start = Carbon::parse($validated['start_date']);
             $end = Carbon::parse($validated['end_date']);
@@ -94,21 +103,22 @@ class TripController extends Controller
                 ];
             }
 
-            if (!empty($days)) {
+            if ($days !== []) {
                 Day::insert($days);
             }
 
             return $trip;
         });
 
-        $trip->load([
-            'days:id,trip_id,title,order',
-            'days.activities:id,day_id,title,order,start_time,end_time,completed,price',
-            'days.transports:id,day_id,from,to,type,price,duration,notes',
-            'days.stays:id,day_id,name,location,price,check_in,check_out,notes',
-        ]);
+        ApiCache::forgetUserTrips((int) $request->user()->id);
+        ApiCache::forgetAdminStats();
+        $trip->load(self::TRIP_RELATIONS);
 
-        return $this->successResponse(new TripResource($trip), 201);
+        return response()->json([
+            'success' => true,
+            'message' => 'Viaje creado correctamente.',
+            'data' => (new TripResource($trip))->resolve($request),
+        ], 201);
     }
 
     // PUT /api/trips/{id}
@@ -116,6 +126,7 @@ class TripController extends Controller
     {
         $trip = $this->findTripForUserOrAbort($request, (int) $id);
         $trip->update($request->validated());
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new TripResource($trip), 200);
     }
@@ -125,6 +136,8 @@ class TripController extends Controller
     {
         $trip = $this->findTripForUserOrAbort($request, (int) $id);
         $trip->delete();
+        ApiCache::forgetUserTrips((int) $request->user()->id);
+        ApiCache::forgetAdminStats();
 
         return response()->noContent();
     }

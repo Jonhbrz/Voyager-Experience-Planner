@@ -8,6 +8,7 @@ use App\Http\Requests\StoreActivityRequest;
 use App\Http\Requests\UpdateActivityRequest;
 use App\Http\Resources\ActivityResource;
 use App\Models\Activity;
+use App\Support\ApiCache;
 use Illuminate\Http\Request;
 
 class ActivityController extends Controller
@@ -65,6 +66,7 @@ class ActivityController extends Controller
             'completed' => $validated['completed'] ?? false,
             'price' => isset($validated['price']) ? (float) $validated['price'] : 0,
         ]);
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new ActivityResource($activity), 201);
     }
@@ -73,6 +75,7 @@ class ActivityController extends Controller
     {
         $activity = $this->findActivityForUserOrAbort($request, (int) $id);
         $activity->update($request->validated());
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new ActivityResource($activity), 200);
     }
@@ -81,6 +84,7 @@ class ActivityController extends Controller
     {
         $activity = $this->findActivityForUserOrAbort($request, (int) $id);
         $activity->delete();
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return response()->noContent();
     }

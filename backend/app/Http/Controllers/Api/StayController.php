@@ -8,6 +8,7 @@ use App\Http\Requests\StoreStayRequest;
 use App\Http\Requests\UpdateStayRequest;
 use App\Http\Resources\StayResource;
 use App\Models\Stay;
+use App\Support\ApiCache;
 use Illuminate\Http\Request;
 
 class StayController extends Controller
@@ -54,6 +55,7 @@ class StayController extends Controller
             'check_out' => $validated['check_out'] ?? null,
             'notes' => $validated['notes'] ?? null,
         ]);
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new StayResource($stay), 201);
     }
@@ -63,6 +65,7 @@ class StayController extends Controller
         $stay = $this->findStayForUserOrAbort($request, (int) $id);
 
         $stay->update($request->validated());
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new StayResource($stay->fresh()), 200);
     }
@@ -71,6 +74,7 @@ class StayController extends Controller
     {
         $stay = $this->findStayForUserOrAbort($request, (int) $id);
         $stay->delete();
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return response()->noContent();
     }

@@ -69,9 +69,11 @@ class TripApiTest extends TestCase
         $response
             ->assertCreated()
             ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Viaje creado correctamente.')
             ->assertJsonPath('data.name', 'Semana en Roma')
             ->assertJsonStructure([
                 'success',
+                'message',
                 'data' => [
                     'id',
                     'name',
@@ -101,7 +103,8 @@ class TripApiTest extends TestCase
             'end_date' => '2026-10-02',
         ])
             ->assertForbidden()
-            ->assertJsonPath('success', false);
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Has alcanzado el límite de viajes del plan Free');
     }
 
     public function test_premium_user_can_create_more_than_three_trips(): void

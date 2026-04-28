@@ -1,110 +1,85 @@
-# Sistema de Gestión (SSG)
+# SSG — Sistema de gestión y lógica de negocio
 
-Esta sección resume las funcionalidades de gestión implementadas en **Voyager Experience Planner** y las relaciona con los criterios de evaluación del sistema.
-
----
-
-## Realiza gestión de clientes/usuarios
-
-La aplicación incorpora una gestión de usuarios basada en autenticación con Laravel Sanctum y una separación clara de roles:
-
-- **`user`**: usuario estándar que puede registrarse, iniciar sesión, gestionar su perfil y planificar sus propios viajes.
-- **`superadmin`**: usuario administrador con acceso al panel `/admin`, desde donde puede consultar y gestionar usuarios e invoices.
-
-Cada usuario tiene además un plan:
-
-- **`free`**: plan gratuito con límite de 3 viajes.
-- **`premium`**: plan de pago simulado con viajes ilimitados.
-
-El panel de administración permite:
-
-- Consultar todos los usuarios registrados.
-- Ver nombre, email, rol, plan y número de viajes de cada usuario, con badges visuales para `superadmin`, `free` y `premium`.
-- Cambiar el plan de un usuario entre `free` y `premium`.
-- Eliminar usuarios, con protección para impedir que un superadmin se elimine a sí mismo.
-- Consultar invoices generadas por upgrades a Premium y abrir su detalle en modal.
-- Ver estadísticas globales: total de usuarios, usuarios Free, usuarios Premium, total de viajes y revenue simulado.
-
-En backend, estas operaciones están protegidas con middleware de rol `superadmin` y se exponen bajo `/api/admin/*`.
+Resumen orientado al **comportamiento implementado** en PRW‑VEP (Voyager Experience Planner).
 
 ---
 
-## Se han generado formularios
+## Usuarios y roles
 
-El proyecto incluye formularios funcionales conectados a la API:
+| Rol | Comportamiento |
+|-----|----------------|
+| **`user`** | Acceso SPA estándar: sus viajes, perfil, facturas propias, sin `/admin`. |
+| **`superadmin`** | **`GET /api/admin/*`**, estadísticas globales, listados de usuarios e invoices todas, cambio/remoción usuarios salvo borrado propio, descarga cualquier PDF facturable según rutas autorizadas. |
 
-### Login y registro
-
-Los formularios de login y registro permiten crear una cuenta e iniciar sesión. El backend valida credenciales, email único y contraseña confirmada, y devuelve un token Sanctum para la SPA.
-
-### Recuperación de contraseña
-
-El flujo de "forgot password" y "reset password" está adaptado a Vue SPA. Laravel genera un enlace hacia el frontend con `token` y `email` en query params, y el formulario de reset envía la nueva contraseña a `/api/reset-password`.
-
-### Perfil de usuario
-
-La sección de perfil permite:
-
-- Consultar nombre y email.
-- Actualizar datos personales.
-- Cambiar contraseña solicitando la contraseña actual.
-
-La validación se realiza en backend con Form Requests y evita, por ejemplo, cambiar el email a uno ya existente.
-
-### Upgrade a Premium
-
-El dashboard muestra el plan actual y, si el usuario está en Free, ofrece un botón **Upgrade to Premium**. Esta acción llama a `/api/upgrade`, cambia el plan a Premium y crea una invoice simulada.
-
-### Acciones de administración
-
-El panel admin incluye controles para:
-
-- Cambiar el plan de un usuario mediante un selector.
-- Eliminar usuarios mediante botón con confirmación.
-- Abrir el detalle de una invoice con el botón **View Invoice**.
-
-Todos los formularios y acciones muestran estados de carga, mensajes de éxito o error, y deshabilitan botones mientras se procesa la operación.
+El rol se muestra como badge texto **superadmin** en UI; la autorización real es servidor (middleware **`EnsureSuperadmin`**).
 
 ---
 
-## Se han creado paneles de control
+## Planes (`free` / `premium`)
 
-### User dashboard
+| Plan | Viajes nuevos |
+|------|----------------|
+| **`free`** | Máximo **3** registros en **`trips`** para ese **`user_id`**. Cuarta creación ⇒ **403** JSON con mensaje de límite. |
+| **`premium`** | Sin tope aplicado en `TripController::store`. |
 
-El dashboard de usuario muestra la experiencia principal de la aplicación:
+**Superadmin** ignora el toque de cantidad mediante **`User::isAdmin()`**, aunque el campo `plan` siga **`free`** en BD.
 
-- Listado de viajes.
-- Creación de nuevos viajes.
-- Acceso a cada viaje y sus días, actividades, transportes y estancias.
-- Badge visible del plan actual (`🆓 Free` o `💎 Premium`) y rol admin (`👑 Superadmin`) cuando aplica.
-- Mensaje claro cuando un usuario Free alcanza el límite de 3 viajes.
-
-Para usuarios Free se restringe la creación de más viajes al llegar al límite. Para usuarios Premium y superadmin, el límite no aplica.
-
-### Admin panel
-
-El panel `/admin` está disponible solo para usuarios con rol `superadmin`. Incluye:
-
-- Tabla de usuarios.
-- Gestión del plan de cada usuario.
-- Eliminación segura de usuarios.
-- Listado de invoices.
-- Modal de detalle de invoice con email, plan, importe formateado en euros y fecha.
-
-### Admin stats dashboard
-
-Dentro del panel admin se añadió una sección de estadísticas con tarjetas:
-
-- Total de usuarios.
-- Usuarios Free.
-- Usuarios Premium.
-- Total de viajes.
-- Revenue simulado acumulado a partir de invoices.
-
-Estos datos se obtienen desde `/api/admin/stats`, evitando cálculos duplicados en frontend y manteniendo la lógica de negocio centralizada en el backend.
+Los controles UX (banner mejora, panel límite, estadísticas resumidas ocultando detalle cuando free no admin…) reflejan el mismo modelo; el servidor es la autoridad para el número de viajes.
 
 ---
 
-## Resumen funcional
+## Suscripción simulada (sin pasarela real)
 
-El sistema permite gestionar usuarios, planes, invoices y límites de uso sin romper la arquitectura SPA existente. La API permanece bajo `/api`, las rutas sensibles están protegidas con Sanctum y middleware de rol, y la interfaz mantiene una experiencia coherente para usuarios estándar y administradores.
+- **Subida**: `PremiumUpgradeService` desde plan **free**: actualiza **`plan`** a **premium**, genera **`Invoice`** (precio único código en backend 999 ≈ €9.99 como céntimos), invalida caches admin/viajes usuario.
+- **Vías de llamada desde API**: `POST /api/upgrade` (compatibilidad breve throttle) y `POST /api/payment/simulate` con método **tarjeta** (`card`) / **transfer** (`transfer`) + **`payment_data`** validado servidor.
+- **Interfaz**: modal tipo flujo (**Tarjeta** / **Transferencia**); envío método + objeto datos; espera resultado JSON y refresca perfil usuario + **`loadTrips()`** cliente.
+- **Bajada**: `POST /api/downgrade` (`PremiumDowngradeService`): **`premium`** → **`free`**; log interno **`plan.downgrade`**; caches invalidados; ningún borrado de viajes ya existentes (con más de 3 sólo impedirán creación nuevos si no se mejora o no es admin).
+
+---
+
+## Gestión trip → día → actividad
+
+- **Creación trip**: servidor inserta todas las **`days`** consecutivas con título “Día n”.
+- **Días**: `DayController` válido rutas **`POST /trips/{trip}/days`** (título…) con **trip** autorizado usuario.
+- **Actividades**: `ActivityController`, **`POST /days/{day}/activities`**, tiempo normalizado H:i servidor.
+- También están **transportes** y **estancias** bajo día con rutas paralelas código.
+
+Todo ello sólo después de chequear **`findTripForUserOrAbort`** / **`findDayForUserOrAbort`**.
+
+---
+
+## Facturación e invoices
+
+| Acción | Implementación breve |
+|--------|-----------------------|
+| Generación tras upgrade simulación | Una fila **invoices** por upgrade con `plan` premium y **`amount`** céntimos. |
+| Lista usuario autenticado | **`GET /api/invoices`**: sólo donde **user_id** = actor. Vista **Perfil** “Mis facturas”. |
+| PDF | **`GET /api/invoices/{invoice}/pdf`**: mismo invoice propio cualquier usuario autentificado o cualquier **`superadmin`** usando DomPDF en blade **`resources/views/invoices/pdf.blade.php`**. |
+| Global admin JSON | **`GET /api/admin/invoices`** datos enriquecidos con **`user`** anidados. |
+
+---
+
+## Paneles y métricas
+
+- **Usuario (dashboard)** viajes ordenados próximos, creación nueva, restricciones visibles cuando free, mejoras/downgrade donde corresponden.
+- **Admin** (`AdminView`): filas KPI desde **`/api/admin/stats`** (**users totals**, free versus premium counts, trip count, sum income invoices), tablas usuario y factura, acciones select plan y delete y descarga PDF.
+
+---
+
+## Formularios clave
+
+| Formulario | Backend |
+|------------|---------|
+| Login / registro / reset | controladores auth + validación request |
+| Perfil / contraseña | **ProfileController** + requests |
+| Crear viaje | **StoreTripRequest** |
+| Pago simulado | **PaymentController** validación inline |
+| Actividad / día / transporte / estancia | requests dedicados / reglas parciales resource |
+
+En cliente, validación básica complementa (fechas viaje, campos pago simulado, no enviar vacíos prohibidos) y los mensajes error API se muestran preferentemente crudos si JSON lo entrega.
+
+---
+
+## Resumen
+
+El sistema combina **control de acceso por token**, **rol admin**, **plan comercial simulado con invoices/PDF**, **límites numéricos en servidor** y **experiencia cliente coherente** (toasts, banner, modales, perfil con historial factura) sin depender de un PSP externo.

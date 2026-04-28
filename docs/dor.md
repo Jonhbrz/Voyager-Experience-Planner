@@ -1,85 +1,41 @@
-# DOR - Diseño de Interfaces
+# DOR — Diseño de interfaces
 
-## Enfoque General de Interfaz
+## Principio visual
 
-La interfaz de **Voyager Experience Planner** busca ser clara, práctica y consistente. Se organiza alrededor de un layout principal con:
+La UI gira en torno al **`MainLayout`**: marca en navbar, zona de usuario/plan/admin, modo oscuro, sidebar listando viajes por nombre, zona central para vistas.
 
-- Navbar superior.
-- Sidebar de viajes.
-- Área central para dashboard, detalle de viaje, perfil o administración.
+Estilos: **CSS propio** (variables `:root` tipo `--primary`, `--navbar`, `--card`, `--border`, `--sidebar`) en `frontend/src/assets/styles.css` y **`scoped`** en vistas/componentes tema claro / dark (`:global(.dark)` donde toca).
 
-La aplicación mantiene una estética coherente mediante variables CSS globales para color, fondo, bordes y tarjetas.
+## Responsive
 
-## Diseño Responsive
+- Navbar enrollable/flexible en vista estrecha; logo y controles reorganizados.
+- Sidebar **colapsable** (`layoutStore`): ancho reducido o ocultamiento en móvil con toggle fijo tipográfico **⮜**.
+- Grids tipo **dashboard** (`auto-fill`, anchos mínimos) para tarjetas de viajes.
+- Tablas administrativas con **`overflow-x: auto`** y ancho mínimo para scroll horizontal sin romper el layout general.
 
-El diseño se adapta a distintos tamaños de pantalla:
+## Componentes repetidos
 
-- La navbar permite que las acciones se reorganicen en pantallas pequeñas.
-- La sidebar puede colapsarse y funcionar como panel lateral.
-- Las tarjetas del dashboard usan grids flexibles.
-- Las tablas del panel admin tienen contenedor con scroll horizontal para no romper el layout.
+- **Badges** plan/rol (`plan-badge`, `role-badge`, variantes `--free` / `--premium`).
+- **Tarjetas** (`stat-card`, `admin-card`, `card-hover`): bordes, sombra ligera hover.
+- **Modales** (pago simulado, factura admin, factura perfil): fondo oscurecido pantalla completa, cierre por overlay o botón, `role="dialog"`, foco accesible básico.
+- Toasts globales (**`Toast.vue`**) desde store de mensajes cortos (`useToastStore` + observación desde `App.vue` de mensajes trips).
 
-## CSS y Frameworks
+## Accesibilidad practicada
 
-El proyecto utiliza CSS propio sobre Vue Single File Components y utilidades de Bootstrap donde encaja. La mayor parte del diseño se controla con:
+- `aria-label` / `aria-labelledby` / `aria-modal` donde corresponde (navbar admin, skeletons cargando viajes/días).
+- `role="alert"` en errores formales (`create-trip-error`, errores perfil/admin).
+- `role="status"` en zonas cargando texto **Cargando…** / skeletons **aria-busy="true`**.
+- Formularios: etiquetas visibles (**Nombre**, **Fecha**, etc.) y placeholders orientativos.
+- Contraste: texto sobre `--navbar`/`--card` mediante variables tema y modo oscuro.
 
-- Variables en `assets/styles.css`.
-- Estilos scoped en cada vista.
-- Clases reutilizadas para tarjetas, botones, errores y estados vacíos.
+## Retroalimentación y flujos
 
-No se depende de un framework visual pesado: la UI se adapta a las necesidades del producto.
+- **Errores** API: Axios → Pinia **`errorMessage`** → toast error (y en dashboard a veces bloque texto formulario **`createTripFormError`**).
+- **Éxitos**: toast verde cuando el store marca `successMessage` (viajes, pagos perfilizado).
+- Flujos: login → dashboard; crear viaje → redirección a `/trip/:id` si creación OK; mejora plan → modal pago → recarga usuario y viajes; admin solo si rol superadmin; perfil muestra lista facturas usuaria.
 
-## Paleta y Consistencia Visual
+## Decisiones coherentes visuales
 
-La paleta gira alrededor de tonos verdes para la identidad principal:
-
-- `--primary` para acciones principales.
-- `--navbar` para la barra superior.
-- `--card` para contenedores.
-- `--border` para separación visual.
-- `--activity` para fondos suaves.
-
-Los badges refuerzan el estado del usuario:
-
-- `🆓 Free`: color neutro.
-- `💎 Premium`: color destacado.
-- `👑 Superadmin`: destacado administrativo.
-
-## Accesibilidad
-
-Se aplican varias medidas:
-
-- Formularios con `label` visible.
-- Estados `role="alert"` para errores.
-- Estados `role="status"` para carga.
-- Botones deshabilitados durante operaciones en curso.
-- Texto con contraste suficiente usando variables de tema.
-- `aria-label` en acciones relevantes como navegación, cierre de sesión o toggle de sidebar.
-
-## Usabilidad
-
-La navegación es directa:
-
-- Dashboard como punto de entrada.
-- Sidebar para viajes.
-- Navbar para perfil, plan, admin y logout.
-- Panel admin visible solo para superadmin.
-
-La aplicación muestra feedback al usuario mediante:
-
-- Toasts de éxito/error.
-- Mensajes inline en formularios.
-- Empty states como “No trips created yet”, “No users found” y “No invoices available yet”.
-- Mensaje claro al alcanzar el límite Free.
-
-## Paneles y Formularios
-
-Los formularios siguen un patrón consistente:
-
-- Campos agrupados.
-- Botón principal visible.
-- Validación de frontend básica.
-- Errores de backend mostrados de forma clara.
-- Carga indicada con textos como “Guardando…” o “Actualizando…”.
-
-El resultado es una interfaz entendible para usuario final y para administración sin mezclar flujos ni sobrecargar pantallas.
+- Paleta **verde** primaria coherentemente en botón crear, badges premium y elementos de marca.
+- Límite **free**: panel/mensajes en tono restricción (rojo suavizado en algunos banners).
+- Un solo idioma de interfaz prácticamente (**español**), manteniendo términos técnicos de plan donde se solicitó (**free**, **premium**, **superadmin**, **admin** en enlaces/nav).

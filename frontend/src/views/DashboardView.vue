@@ -16,6 +16,7 @@ import { formatSpentEUR, getTripTotal } from '@/utils/tripTotals'
 import { useLastVisitedTrip } from '@/composables/useLastVisitedTrip'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
+import axios from 'axios'
 
 const tripsStore = useTripsStore()
 const authStore = useAuthStore()
@@ -23,6 +24,7 @@ const toastStore = useToastStore()
 const router = useRouter()
 const { setLastVisitedTripId } = useLastVisitedTrip()
 const FREE_TRIP_LIMIT = 3
+const TRANSFER_AMOUNT_LABEL = '9,99 EUR'
 
 const showCreateTrip = ref(false)
 const newTripName = ref('')
@@ -30,10 +32,58 @@ const newTripDescription = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const createTripFormError = ref<string | null>(null)
-const isUpgrading = ref(false)
+const showPaymentModal = ref(false)
+const paymentMethod = ref<'card' | 'transfer'>('card')
+const cardHolder = ref('')
+const cardNumber = ref('')
+const cardExpiry = ref('')
+const cardCvv = ref('')
+const transferIban = ref('')
+const transferHolder = ref('')
+const paymentFormError = ref<string | null>(null)
+const isPaymentProcessing = ref(false)
+const isDowngrading = ref(false)
 
 const isFreeUser = computed(() => authStore.user?.plan === 'free' && !authStore.isAdmin)
+
+const showUpgradeBanner = computed(() => {
+  const u = authStore.user
+  return u?.plan === 'free' && u?.role !== 'superadmin'
+})
+
+const showDowngradeOption = computed(() => {
+  const u = authStore.user
+  return u?.plan === 'premium' && u?.role !== 'superadmin'
+})
 const hasTripLimit = computed(() => isFreeUser.value && tripsStore.totalTrips >= FREE_TRIP_LIMIT)
+
+function digitsOnly(s: string): string {
+  return s.replace(/\D/g, '')
+}
+
+function validateCardPayment(): string | null {
+  if (!cardHolder.value.trim()) return 'Indica el titular de la tarjeta.'
+  const num = digitsOnly(cardNumber.value)
+  if (num.length < 13 || num.length > 19) return 'El número de tarjeta debe tener entre 13 y 19 dígitos.'
+  if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(cardExpiry.value.trim()))
+    return 'La fecha de expiración debe tener el formato MM/AA.'
+  if (!/^\d{3,4}$/.test(cardCvv.value.trim())) return 'El CVV debe tener 3 o 4 dígitos.'
+  return null
+}
+
+function validateTransferPayment(): string | null {
+  const iban = transferIban.value.trim().replace(/\s/g, '')
+  if (!iban) return 'Indica el IBAN de origen.'
+  if (iban.length < 15 || iban.length > 34) return 'El IBAN no es válido.'
+  if (!transferHolder.value.trim()) return 'Indica el nombre del titular.'
+  return null
+}
+
+function apiErrMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error) && error.response?.data?.message)
+    return String(error.response.data.message)
+  return fallback
+}
 
 function toYmd(d: Date): string {
   const y = d.getFullYear()
@@ -45,7 +95,7 @@ function toYmd(d: Date): string {
 const openCreateTripPanel = () => {
   if (tripsStore.isLoading || tripsStore.isCreatingTrip) return
   if (hasTripLimit.value) {
-    createTripFormError.value = `You have reached the Free plan limit (${FREE_TRIP_LIMIT} trips). Upgrade to Premium to create more.`
+    createTripFormError.value = `Has alcanzado el límite del plan free (${FREE_TRIP_LIMIT} viajes). Mejora a premium para crear más.`
     return
   }
   createTripFormError.value = null
@@ -78,11 +128,14 @@ const submitCreateTrip = async () => {
   if (tripsStore.isLoading || tripsStore.isCreatingTrip) return
   createTripFormError.value = null
   if (hasTripLimit.value) {
-    createTripFormError.value = `You have reached the Free plan limit (${FREE_TRIP_LIMIT} trips). Upgrade to Premium to create more.`
+    createTripFormError.value = `Has alcanzado el límite del plan free (${FREE_TRIP_LIMIT} viajes). Mejora a premium para crear más.`
     return
   }
   const name = newTripName.value.trim()
-  if (!name) return
+  if (!name) {
+    createTripFormError.value = 'Indica un nombre para el viaje.'
+    return
+  }
   if (!startDate.value || !endDate.value) {
     createTripFormError.value = 'Indica fecha de inicio y fin.'
     return
@@ -128,17 +181,92 @@ function nextActivityStatus(trip: Trip): 'empty' | 'no-pending' | 'has-next' {
   return 'has-next'
 }
 
-async function upgradePlan() {
-  if (isUpgrading.value || authStore.isPremium) return
-  isUpgrading.value = true
+function resetPaymentForm() {
+  paymentMethod.value = 'card'
+  cardHolder.value = ''
+  cardNumber.value = ''
+  cardExpiry.value = ''
+  cardCvv.value = ''
+  transferIban.value = ''
+  transferHolder.value = ''
+  paymentFormError.value = null
+}
+
+function openUpgradeModal() {
+  if (isPaymentProcessing.value) return
+  resetPaymentForm()
+  showPaymentModal.value = true
+}
+
+function closeUpgradeModal() {
+  if (isPaymentProcessing.value) return
+  showPaymentModal.value = false
+}
+
+async function confirmSimulatePayment() {
+  if (isPaymentProcessing.value) return
+  paymentFormError.value = null
+  if (paymentMethod.value === 'card') {
+    const err = validateCardPayment()
+    if (err) {
+      paymentFormError.value = err
+      return
+    }
+  } else {
+    const err = validateTransferPayment()
+    if (err) {
+      paymentFormError.value = err
+      return
+    }
+  }
+  const payload =
+    paymentMethod.value === 'card'
+      ? {
+          method: 'card' as const,
+          payment_data: {
+            holder_name: cardHolder.value.trim(),
+            card_number: digitsOnly(cardNumber.value),
+            expiry: cardExpiry.value.trim(),
+            cvv: cardCvv.value.trim(),
+          },
+        }
+      : {
+          method: 'transfer' as const,
+          payment_data: {
+            iban: transferIban.value.trim().replace(/\s/g, '').toUpperCase(),
+            holder_name: transferHolder.value.trim(),
+            amount: TRANSFER_AMOUNT_LABEL,
+          },
+        }
+  isPaymentProcessing.value = true
   try {
-    const message = await authStore.upgradeToPremium()
+    const message = await authStore.simulatePremiumPayment(payload)
     createTripFormError.value = null
     toastStore.push('success', message)
-  } catch {
-    toastStore.push('error', 'No se pudo actualizar el plan.')
+    showPaymentModal.value = false
+    await tripsStore.loadTrips().catch(() => undefined)
+  } catch (error) {
+    toastStore.push('error', apiErrMessage(error, 'No se pudo completar el pago simulado.'))
   } finally {
-    isUpgrading.value = false
+    isPaymentProcessing.value = false
+  }
+}
+
+async function confirmDowngrade() {
+  if (isDowngrading.value || !showDowngradeOption.value) return
+  const ok = window.confirm(
+    '¿Seguro que quieres volver al plan free? Perderás ventajas como viajes ilimitados en este plan.'
+  )
+  if (!ok) return
+  isDowngrading.value = true
+  try {
+    const message = await authStore.downgradeToFree()
+    toastStore.push('success', message)
+    await tripsStore.loadTrips().catch(() => undefined)
+  } catch (error) {
+    toastStore.push('error', apiErrMessage(error, 'No se pudo cambiar el plan.'))
+  } finally {
+    isDowngrading.value = false
   }
 }
 
@@ -190,13 +318,36 @@ function tripProgress(trip: Trip) {
 
 <template>
   <MainLayout>
+    <div v-if="showUpgradeBanner" class="upgrade-banner" role="region" aria-label="Mejorar plan">
+      <p class="upgrade-banner-text">Mejora a premium para desbloquear viajes ilimitados</p>
+      <button type="button" class="btn-upgrade-banner" :disabled="isPaymentProcessing" @click="openUpgradeModal">
+        Mejorar plan
+      </button>
+    </div>
+
+    <div v-if="showDowngradeOption" class="downgrade-card" role="region" aria-label="Cambiar plan">
+      <p>Tienes plan premium. Puedes volver al plan free cuando quieras.</p>
+      <button
+        type="button"
+        class="btn-downgrade"
+        :disabled="isDowngrading"
+        @click="confirmDowngrade"
+      >
+        {{ isDowngrading ? 'Procesando…' : 'Volver a plan Free' }}
+      </button>
+    </div>
+
     <div class="dashboard-head">
       <h1 id="dashboard-main-heading">Mi Experiencia</h1>
       <button
         type="button"
         class="btn-create"
         :disabled="tripsStore.isLoading || tripsStore.isCreatingTrip || hasTripLimit"
-        :aria-label="hasTripLimit ? 'Plan Free limitado a tres viajes' : 'Abrir formulario para crear un nuevo viaje'"
+        :aria-label="
+          hasTripLimit
+            ? 'Plan free limitado a tres viajes; mejora a premium para crear más'
+            : 'Abrir formulario para crear un nuevo viaje'
+        "
         @click="openCreateTripPanel"
       >
         Crear viaje
@@ -205,11 +356,11 @@ function tripProgress(trip: Trip) {
 
     <div v-if="hasTripLimit && !showCreateTrip" class="limit-panel" role="alert">
       <div>
-        <strong>You have reached the Free plan limit ({{ FREE_TRIP_LIMIT }} trips)</strong>
-        <p>Upgrade to Premium to create unlimited trips.</p>
+        <strong>Has alcanzado el límite del plan free ({{ FREE_TRIP_LIMIT }} viajes)</strong>
+        <p>Mejora a premium para crear viajes sin límite.</p>
       </div>
-      <button type="button" class="btn-upgrade" :disabled="isUpgrading" @click="upgradePlan">
-        {{ isUpgrading ? 'Actualizando...' : 'Upgrade to Premium' }}
+      <button type="button" class="btn-upgrade" :disabled="isPaymentProcessing" @click="openUpgradeModal">
+        {{ isPaymentProcessing ? 'Procesando…' : 'Mejorar a premium' }}
       </button>
     </div>
 
@@ -315,10 +466,268 @@ function tripProgress(trip: Trip) {
     <TripList :trips="tripCards" @open="goTrip" />
     </section>
     </template>
+
+    <Teleport to="body">
+      <div
+        v-if="showPaymentModal"
+        class="payment-modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="payment-modal-title"
+        @click.self="closeUpgradeModal"
+      >
+        <section class="payment-modal payment-modal--wide card-hover">
+          <h2 id="payment-modal-title" class="payment-modal-title">Simular pago</h2>
+          <p class="payment-modal-note">Elige método e introduce datos de prueba. No es un cobro real.</p>
+          <div class="payment-method-row" role="group" aria-label="Método de pago">
+            <label class="payment-option">
+              <input v-model="paymentMethod" type="radio" value="card" name="pay-method" :disabled="isPaymentProcessing" />
+              <span>Tarjeta</span>
+            </label>
+            <label class="payment-option">
+              <input v-model="paymentMethod" type="radio" value="transfer" name="pay-method" :disabled="isPaymentProcessing" />
+              <span>Transferencia</span>
+            </label>
+          </div>
+
+          <div v-if="paymentMethod === 'card'" class="payment-form-grid">
+            <label class="pay-field">
+              <span>Titular de la tarjeta</span>
+              <input v-model="cardHolder" type="text" autocomplete="off" placeholder="Nombre y apellidos" :disabled="isPaymentProcessing" />
+            </label>
+            <label class="pay-field">
+              <span>Número de tarjeta</span>
+              <input v-model="cardNumber" type="text" inputmode="numeric" autocomplete="off" placeholder="13–19 dígitos" :disabled="isPaymentProcessing" />
+            </label>
+            <label class="pay-field">
+              <span>Fecha de expiración</span>
+              <input v-model="cardExpiry" type="text" autocomplete="off" placeholder="MM/AA" maxlength="5" :disabled="isPaymentProcessing" />
+            </label>
+            <label class="pay-field">
+              <span>CVV</span>
+              <input v-model="cardCvv" type="password" autocomplete="off" maxlength="4" placeholder="···" :disabled="isPaymentProcessing" />
+            </label>
+          </div>
+
+          <div v-if="paymentMethod === 'transfer'" class="payment-form-grid">
+            <label class="pay-field">
+              <span>IBAN origen</span>
+              <input v-model="transferIban" type="text" autocomplete="off" placeholder="Ej. ES00 0000 0000 0000 0000 0000" :disabled="isPaymentProcessing" />
+            </label>
+            <label class="pay-field">
+              <span>Cantidad</span>
+              <input :value="TRANSFER_AMOUNT_LABEL" type="text" readonly tabindex="-1" class="readonly-field" aria-readonly="true" />
+            </label>
+            <label class="pay-field pay-field--full">
+              <span>Nombre del titular</span>
+              <input v-model="transferHolder" type="text" autocomplete="name" placeholder="Titular de la cuenta" :disabled="isPaymentProcessing" />
+            </label>
+          </div>
+
+          <p v-if="paymentFormError" class="payment-form-error" role="alert">{{ paymentFormError }}</p>
+
+          <div class="payment-modal-actions">
+            <button type="button" class="btn-create-submit" :disabled="isPaymentProcessing" @click="confirmSimulatePayment">
+              {{ isPaymentProcessing ? 'Procesando…' : 'Confirmar' }}
+            </button>
+            <button type="button" class="btn-create-cancel" :disabled="isPaymentProcessing" @click="closeUpgradeModal">
+              Cancelar
+            </button>
+          </div>
+        </section>
+      </div>
+    </Teleport>
   </MainLayout>
 </template>
 
 <style scoped>
+.upgrade-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+  color: var(--text);
+}
+
+.upgrade-banner-text {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.98rem;
+  line-height: 1.4;
+}
+
+.btn-upgrade-banner {
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+  background: var(--primary);
+  color: #fff;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-upgrade-banner:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(34, 197, 94, 0.35);
+}
+
+.btn-upgrade-banner:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.downgrade-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+.downgrade-card p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.btn-downgrade {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-downgrade:hover:not(:disabled) {
+  background: var(--activity);
+}
+
+.btn-downgrade:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+  .payment-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.payment-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.payment-modal {
+  width: min(440px, 100%);
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px 22px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
+.payment-modal--wide {
+  width: min(500px, 100%);
+}
+
+.payment-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pay-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.pay-field span {
+  color: var(--text-light);
+}
+
+.pay-field input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.pay-field--full {
+  grid-column: 1 / -1;
+}
+
+.readonly-field {
+  opacity: 0.88;
+  cursor: default;
+}
+
+.payment-form-error {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+  color: #b00020;
+}
+
+.payment-modal-title {
+  margin: 0 0 10px;
+  font-size: 1.15rem;
+}
+
+.payment-modal-note {
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  color: var(--text-light);
+}
+
+.payment-method-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.payment-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.payment-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .dashboard-stats {
   padding: 16px;
   border: 1px solid var(--border);
@@ -367,6 +776,11 @@ h1 {
   border-radius: 10px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.btn-upgrade:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .btn-create {
@@ -752,6 +1166,15 @@ h1 {
   color: var(--text-light);
   font-size: 1rem;
   margin-top: 8px;
+}
+
+:global(.dark) .upgrade-banner {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+:global(.dark) .payment-modal {
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
 }
 
 :global(.dark) .stat-card,

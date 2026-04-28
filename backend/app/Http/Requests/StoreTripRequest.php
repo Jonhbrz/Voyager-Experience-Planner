@@ -20,4 +20,14 @@ class StoreTripRequest extends FormRequest
             'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
         ];
     }
+
+    public function attributes(): array
+    {
+        return [
+            'name' => 'nombre',
+            'description' => 'descripción',
+            'start_date' => 'fecha de inicio',
+            'end_date' => 'fecha de fin',
+        ];
+    }
 }

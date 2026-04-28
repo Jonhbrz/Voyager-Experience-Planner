@@ -8,6 +8,7 @@ use App\Http\Requests\StoreTransportRequest;
 use App\Http\Requests\UpdateTransportRequest;
 use App\Http\Resources\TransportResource;
 use App\Models\Transport;
+use App\Support\ApiCache;
 use Illuminate\Http\Request;
 
 class TransportController extends Controller
@@ -54,6 +55,7 @@ class TransportController extends Controller
             'duration' => $validated['duration'] ?? null,
             'notes' => $validated['notes'] ?? null,
         ]);
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new TransportResource($transport), 201);
     }
@@ -63,6 +65,7 @@ class TransportController extends Controller
         $transport = $this->findTransportForUserOrAbort($request, (int) $id);
 
         $transport->update($request->validated());
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return $this->successResponse(new TransportResource($transport->fresh()), 200);
     }
@@ -71,6 +74,7 @@ class TransportController extends Controller
     {
         $transport = $this->findTransportForUserOrAbort($request, (int) $id);
         $transport->delete();
+        ApiCache::forgetUserTrips((int) $request->user()->id);
 
         return response()->noContent();
     }

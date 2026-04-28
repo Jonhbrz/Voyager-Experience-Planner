@@ -1,178 +1,82 @@
-# DSW - Desarrollo en Servidor
+# DSW — Backend (servidor)
 
-## Backend Laravel API
+API REST Laravel bajo el prefijo `/api`; respuestas JSON. Las vistas Blade no forman parte del uso habitual del cliente SPA.
 
-El servidor está desarrollado con **Laravel** como API REST bajo `/api`. No renderiza vistas para la aplicación principal: la interfaz la proporciona Vue y Laravel responde en JSON.
+## Arquitectura
 
-Elementos principales:
+| Área | Ubicación |
+|------|-----------|
+| Rutas | `routes/api.php` |
+| Controladores API | `app/Http/Controllers/Api/` |
+| Autenticación (adaptación API de Breeze) | `app/Http/Controllers/Auth/` |
+| Perfil | `app/Http/Controllers/ProfileController.php` |
+| Form Requests | `app/Http/Requests/` |
+| Middleware rol admin | `app/Http/Middleware/EnsureSuperadmin.php`, alias `superadmin` |
 
-- `routes/api.php`: rutas públicas, rutas autenticadas y rutas de administración.
-- `app/Http/Controllers`: controladores de autenticación, perfil, viajes, suscripción y administración.
-- `app/Http/Middleware/EnsureSuperadmin.php`: middleware para proteger el panel admin.
-- `app/Http/Requests`: validación de formularios y operaciones sensibles.
-- `app/Models`: modelos Eloquent y relaciones de base de datos.
+Las rutas registradas OPTIONS/`auth:sanctum` están ordenadas en `api.php`: públicas (login, registro, reset password); zona usuario (`upgrade`, `downgrade`, `payment/simulate`, facturas propias, CRUD viajes/días/actividades…); prefijo `superadmin` para `/api/admin/*`.
 
-## Autenticación y Autorización
+## Autenticación
 
-La autenticación usa **Laravel Sanctum** con tokens Bearer. Breeze se adaptó a API para login, registro, logout y recuperación de contraseña desde la SPA.
+- **Sanctum**: rutas protegidas con `Authorization: Bearer {token}`.
+- **Sesiones Laravel**: sin usar SPA típicamente en llamadas desde Axios (`routes/auth/*.php` adaptadas como estado sin vistas Blade cliente pesadas donde aplique).
 
-La autorización se basa en:
+## Roles y planes (`users`)
 
-- `auth:sanctum` para rutas privadas.
-- `role = superadmin` para rutas `/api/admin/*`.
-- Comprobaciones de propiedad para que cada usuario gestione solo sus viajes.
+| Campo | Valores |
+|-------|---------|
+| `role` | `superadmin`, `user` |
+| `plan` | `free`, `premium` |
 
-## Lógica Implementada
+- Middleware **`EnsureSuperadmin`**: rutas `/api/admin/*`.
+- Propiedad de recurso: trait **`AuthorizesOwnedApiResources`** (trips/días/actividades solo si pertenecen al usuario).
 
-### Viajes
+## Lógica de negocio implementada
 
-El usuario crea viajes con fechas de inicio y fin. Al crear un viaje, Laravel genera automáticamente los días del intervalo.
+### Viajes (`TripController`)
 
-### Planes Free/Premium
+- **`POST /api/trips`**: crea viaje con validación `StoreTripRequest` (`name`, `description`, `start_date`, `end_date` formato `Y-m-d`; fin ≥ inicio).
+- Asignación **`user_id`** del usuario autenticado.
+- Generación automática de **días** en BD para el intervalo fecha inicio–fin.
+- **Plan free**: máximo **3 viajes**. Comprobación con `Trip::where('user_id', …)->count()` **≥ 3** ⇒ `403` con mensaje fijo acordado.
+- **Premium**: sin ese tope en creación.
+- **`superadmin`**: sin límite aunque el plan sea `free` (`User::isAdmin()`).
+- Respuesta creación **`201`**: `{ success, message: "Viaje creado correctamente.", data }` (trip con relaciones cargadas mediante `TripResource`).
+- **`GET /api/trips`**: resultado cacheado con TTL corto (`ApiCache::userTripsKey`). Invalidación al crear/editar/borrar viaje.
 
-Los usuarios tienen un campo `plan`:
+### Suscripción (`SubscriptionController` + servicios)
 
-- `free`: máximo 3 viajes.
-- `premium`: viajes ilimitados.
+- **`PremiumUpgradeService`**: solo desde `plan === free`; pasa a `premium`, crea **`Invoice`** (importe en céntimos 999), `ApiCache::forgetAdminStats()` y **`forgetUserTrips`** del usuario.
+- **`PremiumDowngradeService`**: solo desde `premium` a `free`; log `plan.downgrade`; mismas invalidaciones de caché pertinentes (stats + lista viajes usuario).
+- Endpoints: `POST /api/upgrade`, `POST /api/downgrade` (throttle en rutas configuradas).
 
-El límite se aplica en backend al crear viajes, por lo que no depende solo del frontend.
+### Pago simulado (`PaymentController`)
 
-### Roles
+- **`POST /api/payment/simulate`** con `method`: `card` \| `transfer` y objeto **`payment_data`** según método (validación con **`Request::validate()`** en **`PaymentController`**, reglas diferenciadas tarjeta vs transferencia): titular/número/expiry/CVV; transferencia IBAN/titular/cantidad.
+- Misma transición a premium que el upgrade (reutiliza **`PremiumUpgradeService`**).
 
-Los usuarios tienen un campo `role`:
+### Facturas y PDF
 
-- `user`: uso normal de la aplicación.
-- `superadmin`: acceso al panel de administración.
+- **`UserInvoiceController`**: **`GET /api/invoices`** lista facturas donde `user_id` = usuario actual.
+- **`InvoicePdfController`**: **`GET /api/invoices/{invoice}/pdf`**: descarga PDF (DomPDF) si el invoice es del usuario **o** el actor es **`superadmin`**.
+- **`AdminController`**: estadísticas cacheadas cortas (`ApiCache`), usuarios con `withCount('trips')`, listado global de invoices para admin.
 
-El usuario `jonathanborza02@gmail.com` se asigna como `superadmin` y `premium` de forma segura mediante migración/seeder.
+## Validación y Form Requests
 
-### Suscripciones e Invoices
+- Viajes: `StoreTripRequest` / `UpdateTripRequest`; atributos en español en `attributes()` donde aplica (`StoreTripRequest`).
+- Actividades: `StoreActivityRequest` / `UpdateActivityRequest`; **`prepareForValidation`** normaliza horas tipo `9:30` → `09:30` antes de **`date_format:H:i`**.
+- Errores API: **`ValidationException`** renderizada JSON en `bootstrap/app.php` con `success: false`, `errors`; **403 HTTP** para mensajes de `abort(...)` configurados ahí mismo.
 
-`POST /api/upgrade` cambia el plan del usuario a Premium y crea una invoice simulada. El endpoint está autenticado y limitado con `throttle`.
+## Caché
 
-### Administración
+- Claves en **`App\Support\ApiCache`**: `admin:stats`, `user:{id}:trips`.
+- Invalidación en creación/edición/eliminación de viajes/días/actividades relacionadas transportes/estancias; también tras cambios de plan (upgrade/downgrade servicios).
 
-El backend expone endpoints para:
+## Base de datos (tablas nucleares)
 
-- Listar usuarios.
-- Cambiar plan.
-- Eliminar usuarios, evitando que el admin se borre a sí mismo.
-- Listar invoices.
-- Obtener estadísticas: usuarios, planes, viajes y revenue simulado.
+- **`users`**: incluye `role`, `plan`.
+- **`trips`**, **`days`**, **`activities`**, **`transports`**, **`stays`**: modelo viaje jerárquico.
+- **`invoices`**: `user_id`, `amount`, `plan`, `created_at` (sin teardown de viajes en downgrade).
 
-## Validación
+## Tests
 
-Se usan Form Requests y validación Laravel para:
-
-- Login y registro.
-- Perfil.
-- Cambio de contraseña con contraseña actual.
-- Creación/edición de viajes y elementos asociados.
-- Cambio de plan desde admin.
-
-Las respuestas de error se devuelven como JSON con código 422 o 403 según corresponda.
-
-## Base de Datos
-
-Tablas principales:
-
-- `users`: usuario, email, contraseña, `role`, `plan`.
-- `personal_access_tokens`: tokens Sanctum.
-- `trips`: viajes del usuario.
-- `days`: días de cada viaje.
-- `activities`, `transports`, `stays`: elementos planificados.
-- `invoices`: importes simulados de upgrades a Premium.
-
-Relación principal: un usuario tiene muchos viajes y muchas invoices; un viaje tiene días; cada día puede tener actividades, transportes y estancias.
-
-## Pruebas
-
-El backend incluye tests de API para:
-
-- Autenticación.
-- Límites del plan Free.
-- Gestión de viajes.
-- Upgrade a Premium.
-- Panel admin.
-- Recuperación de contraseña.
-
-Comando usado para verificación: `docker compose exec backend php artisan test`.
-# DSW - Desarrollo en Servidor
-
-## Arquitectura Laravel API
-
-El backend está implementado con **Laravel** como API REST JSON bajo el prefijo `/api`. La aplicación no depende de vistas Blade para la interfaz: Laravel expone datos y operaciones, y la SPA Vue consume esos endpoints mediante Axios.
-
-La estructura principal se divide en:
-
-- **Rutas** en `routes/api.php`, agrupadas por autenticación y por rol.
-- **Controladores** en `app/Http/Controllers`, separados entre autenticación, perfil, suscripciones, administración y recursos de viaje.
-- **Modelos Eloquent** para `User`, `Trip`, `Day`, `Activity`, `Transport`, `Stay` e `Invoice`.
-- **Middleware** para proteger rutas sensibles, como `auth:sanctum` y `superadmin`.
-- **Form Requests** para validar entradas complejas y mantener los controladores limpios.
-
-## Controladores, Middleware y Rutas
-
-Las rutas públicas gestionan login, registro y recuperación de contraseña. Las rutas protegidas requieren token Sanctum:
-
-- `GET/POST /api/trips` y recursos relacionados.
-- `GET/PATCH /api/profile`.
-- `POST /api/upgrade`.
-- `GET /api/admin/*` para administración.
-
-El middleware `superadmin` restringe el panel administrativo a usuarios con rol `superadmin`. Esto evita que usuarios estándar accedan a listados globales, invoices o acciones de gestión.
-
-## Autenticación con Sanctum y Breeze Adaptado
-
-Laravel Breeze se adaptó a una arquitectura API. En lugar de sesiones Blade, el backend devuelve tokens de Sanctum al iniciar sesión o registrarse. La SPA guarda el token y lo envía en la cabecera:
-
-```http
-Authorization: Bearer {token}
-```
-
-También se implementó recuperación de contraseña API-first: Laravel genera el enlace, pero apunta a la ruta Vue `/reset-password` con `token` y `email` en query params.
-
-## Lógica de Negocio
-
-### Límite del Plan Free
-
-El plan `free` permite crear hasta 3 viajes. La restricción se aplica en el backend dentro de la creación de viajes, por lo que no depende solo de la interfaz:
-
-- Usuario `free`: máximo 3 viajes.
-- Usuario `premium`: viajes ilimitados.
-- `superadmin`: no queda limitado aunque esté en plan Free.
-
-### Sistema de Suscripción
-
-El endpoint `POST /api/upgrade` cambia el plan del usuario autenticado a `premium` y crea una invoice simulada. Este endpoint está autenticado y rate-limited para evitar abuso.
-
-### Control Administrativo
-
-El panel admin usa endpoints protegidos para:
-
-- Listar usuarios.
-- Cambiar planes.
-- Eliminar usuarios con protección contra auto-eliminación.
-- Consultar invoices.
-- Consultar estadísticas agregadas del sistema.
-
-## Validación con Form Requests
-
-La validación se centraliza en Form Requests cuando la entrada tiene reglas relevantes:
-
-- Actualización de perfil.
-- Cambio de contraseña con contraseña actual.
-- Validación de recursos de viaje.
-
-Esto mantiene los controladores más legibles y garantiza respuestas 422 coherentes para el frontend.
-
-## Estructura de Base de Datos
-
-Las tablas principales son:
-
-- **`users`**: datos de cuenta, `role` (`superadmin`/`user`) y `plan` (`free`/`premium`).
-- **`trips`**: viajes del usuario autenticado.
-- **`days`**, **`activities`**, **`transports`**, **`stays`**: planificación detallada del viaje.
-- **`invoices`**: registros simulados generados al actualizar a Premium.
-
-La migración de suscripción asigna de forma segura `superadmin` y `premium` al usuario `jonathanborza02@gmail.com` si existe, sin modificar otros usuarios.
+Tests de características API en **`tests/Feature/Api/`** (auth, viajes, límites free, admin, suscripciones, facturas/PDF). Comando típico: `php artisan test` (o vía contenedor si se usa Docker).

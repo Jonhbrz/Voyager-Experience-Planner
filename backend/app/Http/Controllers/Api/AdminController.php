@@ -6,23 +6,27 @@ use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Trip;
 use App\Models\User;
+use App\Support\ApiCache;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
     public function stats(): JsonResponse
     {
-        return $this->successResponse([
-            'stats' => [
+        $stats = Cache::remember(ApiCache::adminStatsKey(), ApiCache::SHORT_TTL_SECONDS, function () {
+            return [
                 'total_users' => User::query()->count(),
                 'free_users' => User::query()->where('plan', User::PLAN_FREE)->count(),
                 'premium_users' => User::query()->where('plan', User::PLAN_PREMIUM)->count(),
                 'total_trips' => Trip::query()->count(),
                 'total_revenue' => (int) Invoice::query()->sum('amount'),
-            ],
-        ]);
+            ];
+        });
+
+        return $this->successResponse(['stats' => $stats]);
     }
 
     public function users(): JsonResponse
@@ -43,6 +47,7 @@ class AdminController extends Controller
         ]);
 
         $user->forceFill(['plan' => $validated['plan']])->save();
+        ApiCache::forgetAdminStats();
 
         return $this->successResponse([
             'user' => $this->userPayload($user->refresh()),
@@ -57,6 +62,7 @@ class AdminController extends Controller
         }
 
         $user->delete();
+        ApiCache::forgetAdminStats();
 
         return $this->successResponse(['message' => 'User deleted.']);
     }

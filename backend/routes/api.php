@@ -3,10 +3,13 @@
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\DayController;
+use App\Http\Controllers\Api\InvoicePdfController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\StayController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\TransportController;
 use App\Http\Controllers\Api\TripController;
+use App\Http\Controllers\Api\UserInvoiceController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -31,6 +34,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
     Route::post('/upgrade', [SubscriptionController::class, 'upgrade'])->middleware('throttle:5,1');
+    Route::post('/downgrade', [SubscriptionController::class, 'downgrade'])->middleware('throttle:5,1');
+    Route::post('/payment/simulate', [PaymentController::class, 'simulate'])->middleware('throttle:5,1');
+
+    Route::get('/invoices', [UserInvoiceController::class, 'index']);
+    Route::get('/invoices/{invoice}/pdf', [InvoicePdfController::class, 'show']);
 
     Route::middleware('superadmin')->prefix('admin')->group(function () {
         Route::get('/stats', [AdminController::class, 'stats']);

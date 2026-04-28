@@ -141,6 +141,29 @@ export const useAuthStore = defineStore('auth', () => {
     return String(res.data.data?.message ?? 'Plan actualizado a Premium.')
   }
 
+  async function simulatePremiumPayment(payload: {
+    method: 'card' | 'transfer'
+    payment_data: Record<string, string>
+  }) {
+    const res = await api.post('/payment/simulate', payload)
+    const rawUser = res.data.data.user as Partial<AuthUser>
+    warnIfMissingAccessFields('simulatePremiumPayment', rawUser)
+    const u = normalizeUser(rawUser)
+    user.value = u
+    persist()
+    return String(res.data.data?.message ?? 'Plan actualizado a premium.')
+  }
+
+  async function downgradeToFree() {
+    const res = await api.post('/downgrade')
+    const rawUser = res.data.data.user as Partial<AuthUser>
+    warnIfMissingAccessFields('downgradeToFree', rawUser)
+    const u = normalizeUser(rawUser)
+    user.value = u
+    persist()
+    return String(res.data.data?.message ?? 'Has vuelto al plan free.')
+  }
+
   async function updatePassword(
     currentPassword: string,
     password: string,
@@ -185,6 +208,8 @@ export const useAuthStore = defineStore('auth', () => {
     updateProfile,
     updatePassword,
     upgradeToPremium,
+    simulatePremiumPayment,
+    downgradeToFree,
     logout,
     clearSession,
     persist,

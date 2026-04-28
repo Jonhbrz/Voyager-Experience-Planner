@@ -1,91 +1,75 @@
-# DPL - Despliegue y Control de Versiones
+# DPL — Despliegue y control de versiones
 
 ## Repositorio
 
-El proyecto se organiza en una raíz común:
+Estructura en raíz habitual:
 
-- `backend/`: API Laravel.
-- `frontend/`: SPA Vue.
-- `nginx/`: configuración de proxy.
-- `docker-compose.yml`: servicios locales.
-- `docs/`: documentación final.
+| Ruta | Contenido |
+|------|-----------|
+| `backend/` | Laravel (API), `composer.json`, `Dockerfile`, `.env.example` |
+| `frontend/` | Vue + Vite, `package.json`, `Dockerfile` |
+| `nginx/` | Proxy (p. ej. `default.conf`) hacia frontend estático y PHP-FPM |
+| `docker-compose.yml` | Servicios locales / integrados |
+| `docs/` | Documentación MkDocs (`mkdocs.yml` apunta aquí) |
 
-El control de versiones se realiza con **Git**.
+Documentación construible con **MkDocs** (`pip install mkdocs mkdocs-material` y `mkdocs serve` / `mkdocs build`).
 
-## Flujo de Trabajo Git
+## Docker
 
-Flujo recomendado:
+El archivo **`docker-compose.yml`** del repositorio define:
 
-1. Crear una rama para cada cambio.
-2. Implementar una funcionalidad o corrección concreta.
-3. Ejecutar pruebas o build.
-4. Crear commits claros.
-5. Integrar la rama tras revisión.
+| Servicio | Rol |
+|---------|-----|
+| `postgres` | PostgreSQL 15, volumen `pgdata`, healthcheck |
+| `backend` | PHP-FPM, montaje `./backend:/var/www`, variables DB apuntando a `postgres`; Lee **`backend/.env`** si existe (`env_file`) |
+| `frontend` | Imagen construida con build estático típico |
+| `nginx` | Puerto host `${HTTP_PORT:-8000}`, proxy a backend y ficheros SPA |
 
-Ramas habituales:
+Ejecución local típica:
 
-- `feature/...` para nuevas funcionalidades.
-- `fix/...` para correcciones.
-- `docs/...` para documentación.
+```bash
+docker compose up -d --build
+```
 
-Los commits deben agrupar cambios relacionados, por ejemplo backend + frontend + tests cuando forman parte de la misma funcionalidad.
+Migraciones Laravel (dentro del contenedor backend cuando aplique):
 
-## Entorno Docker
+```bash
+docker compose exec backend php artisan migrate --force
+docker compose exec backend php artisan test
+```
 
-El proyecto usa **Docker Compose** para ejecutar el sistema completo.
+**Override de producción:** en este repositorio no hay un segundo compose con nombre fijo; en despliegue real suele repetirse el mismo `docker-compose.yml` cambiando **variables de entorno** (`APP_ENV=production`, `APP_DEBUG=false`, secretos PostgreSQL fuertes) o añadirse un `docker-compose.prod.yml` opcional como `-f`. No debe versionarse el `.env` con secretos.
 
-Servicios:
+## Entorno y variables
 
-- `postgres`: base de datos PostgreSQL.
-- `backend`: Laravel con PHP-FPM.
-- `frontend`: build estático de Vue.
-- `nginx`: punto de entrada HTTP y proxy hacia frontend/API.
+- **Backend**: credenciales y `APP_*` en **`backend/.env`** (tomar valores de **`backend/.env.example`** como plantilla).
+- **Compose**: variables como `HTTP_PORT`, `POSTGRES_*`, `APP_URL`, `CACHE_STORE`, `QUEUE_*` pueden definirse en `.env` en la raíz del proyecto de despliegue o exportarse en CI.
 
-NGINX sirve la SPA y enruta `/api` hacia Laravel.
+Separación práctica desarrollo vs producción: mismo árbol, distintos valores de **`APP_ENV`**, **`APP_DEBUG`**, URLs y credenciales (no usar `.env` de desarrollo en producción).
 
-## Variables y Base de Datos
+## Frontend
 
-El backend usa `.env` para configurar:
+| Comando | Uso |
+|---------|-----|
+| `npm install` / `npm ci` | Dependencias (`frontend/`) |
+| `npm run dev` | Vite en desarrollo (HMR); proxy opcional `/api` hacia backend |
+| `npm run build` | Salida típica `dist/` para servir tras Nginx/contenedor frontend |
 
-- `APP_KEY`.
-- Conexión PostgreSQL.
-- Configuración de correo.
-- URL del frontend para reset de contraseña.
+El **Dockerfile** del frontend ejecuta normalmente instalación + `npm run build` para servir sólo artefactos estáticos.
 
-Las migraciones crean la estructura de usuarios, viajes, planes, roles e invoices.
+## Backend en producción
 
-## Ejecución Local
+Comandos habituales post-deploy (adaptar al runner):
 
-Pasos principales:
+```bash
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
 
-1. Levantar servicios con Docker Compose.
-2. Ejecutar migraciones Laravel.
-3. Acceder a la aplicación desde el puerto configurado.
+(No sustituyen migraciones ni `APP_KEY` ya configurados.)
 
-Comandos principales:
+## Git
 
-- `docker compose up -d --build`
-- `docker compose exec backend php artisan migrate --force`
-- `docker compose exec backend php artisan test`
-
-## Desarrollo Frontend
-
-Para desarrollo con recarga en caliente se usa Vite dentro de `frontend/`.
-
-Comandos:
-
-- `npm install` o `npm ci`.
-- `npm run dev`.
-- `npm run build`.
-
-El build genera `dist/`, que puede servirse como frontend estático.
-
-## Verificación Final
-
-Antes de entregar:
-
-- Ejecutar tests del backend.
-- Ejecutar build del frontend.
-- Revisar que `/api` funciona con Sanctum.
-- Comprobar login, viajes, perfil, upgrade y admin.
-- Confirmar que no se versionan secretos como `.env`.
+- Rama y commits por función o área (**backend**/ **frontend**/ **tests**/ **docs**) con mensajes claros en español o inglés, según convención del equipo.
+- No commitear `backend/.env` ni ficheros `.env*` con secretos.
