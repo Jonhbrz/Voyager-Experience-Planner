@@ -3,6 +3,7 @@ import axios from 'axios'
 import type { Trip, Day, Activity, Transport, Stay } from '@/types/trip'
 import api from '@/services/api'
 import { clampPrice, getTripTotal } from '@/utils/tripTotals'
+import { normalizeArray, safeMap } from '@/utils/normalizers'
 
 let messageDismissTimer: ReturnType<typeof setTimeout> | null = null
 const RETRYABLE_NETWORK_CODES = new Set(['ECONNABORTED', 'ERR_NETWORK', 'ETIMEDOUT'])
@@ -48,8 +49,9 @@ function scheduleMessageAutoClear(store: {
   }, 3000)
 }
 
-function sortedActivitiesCopy(activities: Activity[]): Activity[] {
-  return [...activities].sort((a, b) => {
+function sortedActivitiesCopy(activities: Activity[] | unknown): Activity[] {
+  const list = normalizeArray(activities) as Activity[]
+  return [...list].sort((a, b) => {
     const t1 = a.start_time || ''
     const t2 = b.start_time || ''
     if (t1 !== t2) return t1.localeCompare(t2)
@@ -254,20 +256,21 @@ export const useTripsStore = defineStore('trips', {
     },
 
     normalizeTripDays(trip: Trip): Trip {
+      const days = normalizeArray(trip.days) as Day[]
       return {
         ...trip,
-        days: (trip.days || []).map(d => ({
+        days: days.map(d => ({
           ...d,
-          activities: (d.activities || []).map(a => ({
+          activities: safeMap<Activity, Activity>(d.activities, a => ({
             ...a,
             completed: !!(a.completed ?? false),
             price: clampPrice(a.price),
           })),
-          transports: (d.transports || []).map(t => ({
+          transports: safeMap<Transport, Transport>(d.transports, t => ({
             ...t,
             price: clampPrice(t.price),
           })),
-          stays: (d.stays || []).map(s => ({
+          stays: safeMap<Stay, Stay>(d.stays, s => ({
             ...s,
             price: clampPrice(s.price),
           })),
@@ -277,15 +280,46 @@ export const useTripsStore = defineStore('trips', {
 
     async loadTrips() {
       try {
-        await this.runRequest(
-          'No se pudieron cargar los viajes.',
-          null,
-          async () => {
-            const res = await api.get('/trips')
-            const raw = res.data.data as Trip[]
-            this.trips = Array.isArray(raw) ? raw.map(t => this.normalizeTripDays(t)) : []
+        this.setLoading(true)
+        this.clearError()
+        this.clearSuccess()
+        try {
+          const res = await api.get('/trips')
+          const root = res.data as unknown
+          const payload =
+            root !== null &&
+            typeof root === 'object' &&
+            !Array.isArray(root) &&
+            'data' in root
+              ? (root as { data: unknown }).data
+              : root
+          const trips = normalizeArray(payload) as Trip[]
+          if (
+            trips.length === 0 &&
+            payload != null &&
+            payload !== '' &&
+            typeof payload !== 'boolean' &&
+            !Array.isArray(payload) &&
+            !(
+              typeof payload === 'object' &&
+              Array.isArray((payload as { data?: unknown }).data)
+            )
+          ) {
+            console.warn('Unexpected trips format:', res.data)
           }
-        )
+          this.trips = trips.map(t => this.normalizeTripDays(t))
+        } catch (e: unknown) {
+          console.error('Error loading trips:', e)
+          if (axios.isAxiosError(e)) {
+            console.error('Response:', e.response)
+          }
+          this.setError(e, 'No se pudieron cargar los viajes')
+        } finally {
+          this.setLoading(false)
+          if (this.successMessage || this.errorMessage) {
+            scheduleMessageAutoClear(this)
+          }
+        }
       } finally {
         this.initialLoadDone = true
       }
@@ -430,9 +464,9 @@ export const useTripsStore = defineStore('trips', {
                 ...t.days,
                 {
                   ...day,
-                  activities: day.activities || [],
-                  transports: day.transports || [],
-                  stays: day.stays || [],
+                  activities: normalizeArray(day.activities) as Activity[],
+                  transports: normalizeArray(day.transports) as Transport[],
+                  stays: normalizeArray(day.stays) as Stay[],
                 },
               ],
             }))

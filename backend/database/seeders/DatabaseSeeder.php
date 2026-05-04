@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,26 +15,15 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::query()->firstOrCreate([
-            'email' => 'test@example.com',
-        ], [
-            'name' => 'Test User',
-            'password' => Hash::make('password'),
-        ]);
-
-        $superadmin = User::query()->firstOrCreate(
+        User::query()->updateOrCreate(
             ['email' => 'jonathanborza02@gmail.com'],
             [
                 'name' => 'Jonathan Borza',
-                'password' => Hash::make(str()->random(32)),
+                // Plain text: User model uses cast password => 'hashed' (do not Hash::make here).
+                'password' => '123456',
+                'role' => User::ROLE_SUPERADMIN,
+                'plan' => User::PLAN_PREMIUM,
             ]
         );
-
-        $superadmin->forceFill([
-            'role' => User::ROLE_SUPERADMIN,
-            'plan' => User::PLAN_PREMIUM,
-        ])->save();
     }
 }

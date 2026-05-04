@@ -5,6 +5,7 @@ import MainLayout from '@/layouts/MainLayout.vue'
 import { useAuthStore, type AuthUser } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import { formatCurrency } from '@/utils/formatters'
+import { planLabels, roleLabels } from '@/utils/labels'
 import {
   deleteAdminUser,
   downloadInvoicePdf,
@@ -47,18 +48,18 @@ function formatDate(value: string): string {
 
 const statCards = computed(() => [
   { label: 'Usuarios', value: stats.value?.total_users ?? 0 },
-  { label: 'free', value: stats.value?.free_users ?? 0 },
-  { label: 'premium', value: stats.value?.premium_users ?? 0 },
+  { label: planLabels.free, value: stats.value?.free_users ?? 0 },
+  { label: planLabels.premium, value: stats.value?.premium_users ?? 0 },
   { label: 'Viajes', value: stats.value?.total_trips ?? 0 },
   { label: 'Ingresos', value: formatCurrency(stats.value?.total_revenue ?? 0) },
 ])
 
 function roleLabel(role: AuthUser['role']): string {
-  return role === 'superadmin' ? '👑 superadmin' : 'Usuario'
+  return roleLabels[role] || role
 }
 
 function planLabel(plan: AuthUser['plan']): string {
-  return plan === 'premium' ? '💎 premium' : '🆓 free'
+  return planLabels[plan] || plan
 }
 
 async function loadAdminData() {

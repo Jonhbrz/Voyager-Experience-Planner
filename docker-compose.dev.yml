@@ -1,0 +1,79 @@
+# Development stack: Vite HMR (5173), Laravel (host 8002 → container 8000), PostgreSQL (host 5434 → container 5432).
+# Run: docker compose -f docker-compose.dev.yml up --build
+# Does not replace the root docker-compose.yml.
+#
+# IMPORTANT: On Linux, the image recipe filename is case-sensitive — use "Dockerfile", not "dockerfile".
+
+name: vep-dev
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: app_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    # NOTE:
+    # Host port changed to 5434 to avoid conflict with local PostgreSQL or other containers.
+    # Container still uses 5432 internally (Laravel DB_HOST=db, DB_PORT=5432 unchanged).
+    ports:
+      - "5434:5432"
+    volumes:
+      - vep_dev_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    working_dir: /var/www
+    # NOTE:
+    # Host port changed to 8002 to avoid conflict with existing services (e.g. prod stack on 8001, other apps on 8000).
+    # Container still runs artisan serve on 8000 internally.
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./backend:/var/www
+      - vep_dev_vendor:/var/www/vendor
+    env_file:
+      - .env.dev
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        set -e;
+        cd /var/www;
+        if [ ! -f "vendor/laravel/pail/src/PailServiceProvider.php" ]; then
+          composer install --no-interaction --prefer-dist --optimize-autoloader;
+        fi;
+        php artisan migrate --force || true;
+        exec php artisan serve --host=0.0.0.0 --port=8000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - vep_dev_node_modules:/app/node_modules
+    environment:
+      # Must match published backend host port (8002) so the browser reaches the API from the host.
+      VITE_API_BASE_URL: http://localhost:8002/api
+    command:
+      - /bin/sh
+      - -c
+      - npm ci && npm run dev -- --host 0.0.0.0 --port 5173
+    depends_on:
+      - backend
+
+volumes:
+  vep_dev_pgdata:
+  vep_dev_node_modules:
+  vep_dev_vendor:

@@ -20,6 +20,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    console.error('API ERROR:', error?.response ?? error)
     if (axios.isAxiosError(error) && error.response?.status === 401) {
       localStorage.removeItem(AUTH_TOKEN_KEY)
       localStorage.removeItem(AUTH_USER_KEY)

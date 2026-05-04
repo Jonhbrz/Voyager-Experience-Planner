@@ -30,6 +30,11 @@ Las rutas registradas OPTIONS/`auth:sanctum` están ordenadas en `api.php`: púb
 - Middleware **`EnsureSuperadmin`**: rutas `/api/admin/*`.
 - Propiedad de recurso: trait **`AuthorizesOwnedApiResources`** (trips/días/actividades solo si pertenecen al usuario).
 
+### Seeder y contraseñas
+
+- **`database/seeders/DatabaseSeeder.php`** crea o actualiza el superadmin **`jonathanborza02@gmail.com`** con contraseña **`123456`** y plan premium. No se ejecuta solo al levantar contenedores: hay que lanzar `php artisan db:seed` cuando corresponda (comandos en **[DPL](dpl.md)**).
+- El modelo **`User`** declara cast **`password` ⇒ `hashed`**: al persistir, Laravel hashea el valor. Por tanto, en el seeder debe usarse la contraseña en **texto plano** (`'123456'`), no `Hash::make(...)`, para evitar doble hash y fallos de login (`422` / mensaje de credenciales incorrectas).
+
 ## Lógica de negocio implementada
 
 ### Viajes (`TripController`)

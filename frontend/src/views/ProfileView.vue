@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import { fetchMyInvoices, downloadInvoicePdf, type UserInvoice } from '@/services/invoices'
 import { formatCurrency } from '@/utils/formatters'
+import { planLabels, roleLabels } from '@/utils/labels'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -83,7 +84,7 @@ async function downloadPdf(inv: UserInvoice) {
 }
 
 function planLabel(plan: UserInvoice['plan']): string {
-  return plan === 'premium' ? '💎 premium' : '🆓 free'
+  return planLabels[plan] || plan
 }
 
 function formatInvoiceDate(iso: string): string {
@@ -146,9 +147,11 @@ onMounted(() => {
           <h1 id="profile-title">Perfil</h1>
           <p>Gestiona tus datos de cuenta y contraseña.</p>
           <div v-if="auth.user" class="profile-badges" aria-label="Rol y plan del usuario">
-            <span v-if="auth.isAdmin" class="profile-badge profile-badge--admin">👑 superadmin</span>
+            <span v-if="auth.isAdmin" class="profile-badge profile-badge--admin">
+              👑 {{ roleLabels[auth.user.role] || auth.user.role }}
+            </span>
             <span class="profile-badge" :class="`profile-badge--${auth.user.plan}`">
-              {{ auth.user.plan === 'premium' ? '💎 premium' : '🆓 free' }}
+              {{ planLabels[auth.user.plan] || auth.user.plan }}
             </span>
           </div>
         </div>

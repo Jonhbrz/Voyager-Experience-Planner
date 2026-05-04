@@ -24,7 +24,7 @@ Documentación final del proyecto **PRW-VEP** (*Voyager Experience Planner*), pr
 - **Frontend:** Vue 3, TypeScript, Vite, Pinia, Vue Router, Axios; interfaz responsive con Bootstrap como base de utilidades donde aplica.
 - **Backend:** Laravel 13 (PHP 8.3), API REST JSON, autenticación con **Laravel Sanctum** (tokens Bearer).
 - **Datos:** PostgreSQL 15.
-- **Entorno integrado:** contenedores Docker (PostgreSQL, PHP-FPM, build del frontend estático, NGINX como proxy y front door).
+- **Entorno integrado:** Docker con **`docker-compose.yml`** (Nginx + PHP-FPM + PostgreSQL + frontend), o stacks alternativos **`docker-compose.dev.yml`** (Vite HMR + `artisan serve`) y **`docker-compose.prod.yml`** (build + preview); detalle en **[DPL](dpl.md)**.
 
 ---
 

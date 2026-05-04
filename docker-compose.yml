@@ -1,3 +1,5 @@
+# IMPORTANT: On Linux, Docker build dockerfile paths are case-sensitive — use "Dockerfile", not "dockerfile".
+
 services:
 
   postgres:

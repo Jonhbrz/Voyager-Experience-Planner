@@ -32,9 +32,15 @@ SPA **Vue 3** con **TypeScript**, **Vite**, **Pinia** y **Vue Router**. Las llam
 
 ## Integración API
 
-- Base URL configurable `VITE_API_BASE_URL` o por defecto `/api` (proxy Vite en desarrollo).
+- Base URL configurable **`VITE_API_BASE_URL`** o por defecto `/api` (proxy Vite en desarrollo local sin Docker).
 - Respuesta creación viaje: usa `message` del JSON si existe para el toast de éxito.
 - Errores 403 límite viajes: mensaje mostrado desde cuerpo API.
+
+### Docker (stacks dev / prod)
+
+En **`docker-compose.dev.yml`** el frontend recibe por entorno `VITE_API_BASE_URL=http://localhost:8002/api` (puerto publicado del backend en el host).
+
+En **`docker-compose.prod.yml`** la URL se inyecta en el **build** de la imagen (`VITE_API_BASE_URL=http://localhost:8001/api`). Si cambias dominio o puerto del API, hay que **reconstruir** el servicio frontend (`docker compose ... up --build`). Detalle operativo en **[DPL](dpl.md)**.
 
 ## UX implementada (resumen)
 

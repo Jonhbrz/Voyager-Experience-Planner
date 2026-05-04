@@ -25,11 +25,11 @@
         <router-link v-if="authStore.user" to="/profile" class="user-label profile-link">
           {{ authStore.user.name }}
         </router-link>
-        <span v-if="authStore.isAdmin" class="role-badge role-badge--admin">
-          👑 superadmin
+        <span v-if="authStore.isAdmin && authStore.user" class="role-badge role-badge--admin">
+          👑 {{ roleLabels[authStore.user.role] || authStore.user.role }}
         </span>
         <span v-if="authStore.user" class="plan-badge" :class="`plan-badge--${authStore.user.plan}`">
-          {{ authStore.user.plan === 'premium' ? '💎 premium' : '🆓 free' }}
+          {{ planLabels[authStore.user.plan] || authStore.user.plan }}
         </span>
         <button
           v-if="authStore.user?.role === 'superadmin'"
@@ -104,6 +104,7 @@ import { useLayoutStore } from '@/stores/layout'
 import TripSidebarItem from '@/components/TripSidebarItem.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useLastVisitedTrip } from '@/composables/useLastVisitedTrip'
+import { planLabels, roleLabels } from '@/utils/labels'
 
 const router = useRouter()
 const tripsStore = useTripsStore()
