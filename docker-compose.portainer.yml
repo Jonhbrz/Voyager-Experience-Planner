@@ -1,0 +1,85 @@
+name: vep-portainer
+
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_HOST_PORT}:5432"
+    volumes:
+      - vep_portainer_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ${PROJECT_BUILD}/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /var/www
+    ports:
+      - "${BACKEND_HOST_PORT}:8000"
+    volumes:
+      - ${PROJECT_MOUNT}/backend:/var/www
+      - vep_portainer_vendor:/var/www/vendor
+    environment:
+      APP_ENV: ${APP_ENV}
+      APP_DEBUG: ${APP_DEBUG}
+      APP_KEY: ${APP_KEY}
+      APP_URL: ${APP_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS}
+      SESSION_DRIVER: ${SESSION_DRIVER}
+      QUEUE_CONNECTION: ${QUEUE_CONNECTION}
+      CACHE_STORE: ${CACHE_STORE}
+      DB_CONNECTION: ${DB_CONNECTION}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    entrypoint: ["/bin/sh", "-c"]
+
+    command:
+      - >-
+        set -e;
+        cd /var/www;
+        if [ ! -f "vendor/laravel/pail/src/PailServiceProvider.php" ]; then
+          composer install --no-interaction --prefer-dist --optimize-autoloader;
+        fi;
+        php artisan migrate --force || true;
+        exec php artisan serve --host=0.0.0.0 --port=8000 --no-reload
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "${FRONTEND_HOST_PORT}:5173"
+    volumes:
+      - ${PROJECT_MOUNT}/frontend:/app
+      - vep_portainer_node_modules:/app/node_modules
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    command:
+      - /bin/sh
+      - -c
+      - npm ci && npm run dev -- --host 0.0.0.0 --port 5173
+    depends_on:
+      - backend
+
+volumes:
+  vep_portainer_pgdata:
+  vep_portainer_node_modules:
+  vep_portainer_vendor:
