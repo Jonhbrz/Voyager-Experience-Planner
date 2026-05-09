@@ -35,10 +35,10 @@ nav:
   - Guía de usuario: usage.md
   - DSW - Backend: dsw.md
   - DEW - Frontend: dew.md
-  - DPL - Despliegue y Git: dpl.md
+  - DPL - Despliegue, Docker y CI/CD: dpl.md
   - DOR - Interfaces: dor.md
   - SSG - Sistema de Gestión: ssg.md
-  - IPW - Prevención Laboral: ipw.md
+  - IPW - Empleabilidad: ipw.md
   - SOJ - Sostenibilidad: soj.md
 
 extra:

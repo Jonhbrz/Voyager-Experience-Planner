@@ -133,7 +133,7 @@ Sirve para comparar viajes de un vistazo y decidir dónde ajustar el plan.
 
 ## Modo oscuro y accesibilidad
 
-Si la barra superior incluye un control de **tema** (sol/luna), puedes alternar entre modo claro y oscuro para leer con más comodidad.
+La barra superior incluye un control de **tema** (sol/luna), puedes alternar entre modo claro y oscuro para leer con más comodidad.
 
 ---
 

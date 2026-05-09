@@ -1,6 +1,14 @@
 # SSG — Sistema de gestión y lógica de negocio
 
-Resumen orientado al **comportamiento implementado** en PRW‑VEP (Voyager Experience Planner).
+Resumen orientado al **comportamiento implementado** en PRW-VEP (Voyager Experience Planner) y a los criterios SSG: **gestión de clientes/usuarios**, **formularios** y **paneles de control**.
+
+## Cumplimiento de criterios SSG
+
+| Criterio | Implementación |
+|----------|----------------|
+| **Gestión de clientes / usuarios** | Registro, login, perfil, cambio de contraseña, recuperación, planes (`free`/`premium`), roles (`user`/`superadmin`), CRUD admin sobre usuarios (cambio de plan y borrado). |
+| **Formularios** | Auth (login, registro, forgot, reset), perfil/contraseña, creación y edición de viajes/días/actividades/transportes/estancias, modal de pago simulado (tarjeta/transferencia), filtros y selectores en panel admin. Validación cliente + servidor (Form Requests Laravel). |
+| **Paneles de control** | **Dashboard** del usuario con tarjetas de viajes y resumen, **panel de viaje** con días/actividades/transportes/estancias y totales, **Mis facturas** en perfil, **Panel administrativo** (`AdminView`) con KPIs (estadísticas globales, listado de usuarios, listado global de facturas). |
 
 ---
 
@@ -8,10 +16,10 @@ Resumen orientado al **comportamiento implementado** en PRW‑VEP (Voyager Exper
 
 | Rol | Comportamiento |
 |-----|----------------|
-| **`user`** | Acceso SPA estándar: sus viajes, perfil, facturas propias, sin `/admin`. |
-| **`superadmin`** | **`GET /api/admin/*`**, estadísticas globales, listados de usuarios e invoices todas, cambio/remoción usuarios salvo borrado propio, descarga cualquier PDF facturable según rutas autorizadas. |
+| **`user`** | Acceso SPA estándar: sus viajes, perfil, facturas propias. No accede a `/admin`. |
+| **`superadmin`** | Acceso a **`GET /api/admin/*`**: estadísticas globales, listado de usuarios e invoices, cambio/borrado de usuarios (salvo borrado propio), descarga de cualquier PDF de factura. |
 
-El rol se muestra como badge texto **superadmin** en UI; la autorización real es servidor (middleware **`EnsureSuperadmin`**).
+El rol se muestra como badge **superadmin** en la UI; la autorización real es **servidor** (middleware **`EnsureSuperadmin`**). Detalle de la API en **[DSW](dsw.md)**.
 
 ---
 
@@ -19,67 +27,95 @@ El rol se muestra como badge texto **superadmin** en UI; la autorización real e
 
 | Plan | Viajes nuevos |
 |------|----------------|
-| **`free`** | Máximo **3** registros en **`trips`** para ese **`user_id`**. Cuarta creación ⇒ **403** JSON con mensaje de límite. |
+| **`free`** | Máximo **3** registros en `trips` para ese `user_id`. La cuarta creación devuelve **403** JSON con mensaje de límite. |
 | **`premium`** | Sin tope aplicado en `TripController::store`. |
 
-**Superadmin** ignora el toque de cantidad mediante **`User::isAdmin()`**, aunque el campo `plan` siga **`free`** en BD.
+**Superadmin** ignora el tope mediante `User::isAdmin()`, aunque el campo `plan` siga siendo `free` en BD.
 
-Los controles UX (banner mejora, panel límite, estadísticas resumidas ocultando detalle cuando free no admin…) reflejan el mismo modelo; el servidor es la autoridad para el número de viajes.
+Los controles UX (banner de mejora, panel de límite, estadísticas resumidas ocultando detalle cuando es free no admin…) reflejan el mismo modelo; el servidor es la **autoridad** del número de viajes.
 
 ---
 
 ## Suscripción simulada (sin pasarela real)
 
-- **Subida**: `PremiumUpgradeService` desde plan **free**: actualiza **`plan`** a **premium**, genera **`Invoice`** (precio único código en backend 999 ≈ €9.99 como céntimos), invalida caches admin/viajes usuario.
-- **Vías de llamada desde API**: `POST /api/upgrade` (compatibilidad breve throttle) y `POST /api/payment/simulate` con método **tarjeta** (`card`) / **transfer** (`transfer`) + **`payment_data`** validado servidor.
-- **Interfaz**: modal tipo flujo (**Tarjeta** / **Transferencia**); envío método + objeto datos; espera resultado JSON y refresca perfil usuario + **`loadTrips()`** cliente.
-- **Bajada**: `POST /api/downgrade` (`PremiumDowngradeService`): **`premium`** → **`free`**; log interno **`plan.downgrade`**; caches invalidados; ningún borrado de viajes ya existentes (con más de 3 sólo impedirán creación nuevos si no se mejora o no es admin).
+- **Subida (`PremiumUpgradeService`)** desde plan `free`: actualiza `plan` a `premium`, genera **`Invoice`** (importe fijo `999` céntimos = **9,99 €**), invalida cachés (`admin:stats`, `user:{id}:trips`).
+- **Vías de llamada** desde la API:
+  - `POST /api/upgrade` (compatibilidad, con throttle).
+  - `POST /api/payment/simulate` con `method`: `card` / `transfer` y `payment_data` validado en servidor.
+- **Interfaz**: modal con dos tabs (**Tarjeta** / **Transferencia**); envía `method` + `payment_data`; al recibir el JSON refresca el perfil del usuario y `loadTrips()`.
+- **Bajada (`PremiumDowngradeService`)** vía `POST /api/downgrade`: pasa `premium → free`, registra log `plan.downgrade`, invalida cachés. **No** borra viajes ya existentes (si el usuario tenía más de 3 viajes, se quedan; sólo no podrá crear nuevos hasta volver a premium o ser admin).
 
 ---
 
 ## Gestión trip → día → actividad
 
-- **Creación trip**: servidor inserta todas las **`days`** consecutivas con título “Día n”.
-- **Días**: `DayController` válido rutas **`POST /trips/{trip}/days`** (título…) con **trip** autorizado usuario.
-- **Actividades**: `ActivityController`, **`POST /days/{day}/activities`**, tiempo normalizado H:i servidor.
-- También están **transportes** y **estancias** bajo día con rutas paralelas código.
+- **Creación de viaje**: el servidor inserta en cascada todos los **`days`** consecutivos con título “Día n”.
+- **Días**: `DayController` con `POST /trips/{tripId}/days` y los demás verbos REST; comprobación previa de pertenencia con `findTripForUserOrAbort`.
+- **Actividades**: `ActivityController`; `POST /days/{dayId}/activities` con normalización de hora (`H:i`).
+- **Transportes** y **Estancias**: rutas paralelas bajo `/days/{dayId}/transports` y `/days/{dayId}/stays`.
 
-Todo ello sólo después de chequear **`findTripForUserOrAbort`** / **`findDayForUserOrAbort`**.
+Todas las acciones pasan por la verificación de propiedad (`findTripForUserOrAbort` / `findDayForUserOrAbort`) antes de cualquier escritura.
 
 ---
 
 ## Facturación e invoices
 
-| Acción | Implementación breve |
-|--------|-----------------------|
-| Generación tras upgrade simulación | Una fila **invoices** por upgrade con `plan` premium y **`amount`** céntimos. |
-| Lista usuario autenticado | **`GET /api/invoices`**: sólo donde **user_id** = actor. Vista **Perfil** “Mis facturas”. |
-| PDF | **`GET /api/invoices/{invoice}/pdf`**: mismo invoice propio cualquier usuario autentificado o cualquier **`superadmin`** usando DomPDF en blade **`resources/views/invoices/pdf.blade.php`**. |
-| Global admin JSON | **`GET /api/admin/invoices`** datos enriquecidos con **`user`** anidados. |
+| Acción | Implementación |
+|--------|----------------|
+| Generación tras upgrade simulado | Una fila en `invoices` por upgrade (`plan = premium`, `amount` en céntimos). |
+| Lista del usuario autenticado | `GET /api/invoices` (sólo donde `user_id` = actor). Vista **Perfil** → "Mis facturas". |
+| PDF | `GET /api/invoices/{invoice}/pdf`: descarga DomPDF si la factura es del usuario o el actor es `superadmin`. Plantilla en `resources/views/invoices/pdf.blade.php`. |
+| Listado global admin | `GET /api/admin/invoices` con `user` anidado para mostrar por usuario. |
 
 ---
 
 ## Paneles y métricas
 
-- **Usuario (dashboard)** viajes ordenados próximos, creación nueva, restricciones visibles cuando free, mejoras/downgrade donde corresponden.
-- **Admin** (`AdminView`): filas KPI desde **`/api/admin/stats`** (**users totals**, free versus premium counts, trip count, sum income invoices), tablas usuario y factura, acciones select plan y delete y descarga PDF.
+### Panel de usuario (Dashboard)
+
+- Listado de viajes con **tarjetas** (días, actividades, total estimado).
+- Botón **Crear viaje** con modal/formulario.
+- **Banner de mejora** si el plan es `free` (no se muestra a admin).
+- **Panel de límite free** mostrando "X / 3" y CTA a premium.
+- Botón **volver a plan free** si el usuario es `premium` y no admin.
+
+### Panel de viaje
+
+- Listado de **días** con apertura/cierre por tarjeta.
+- Subbloques de **actividades** (con título, hora, estado *hecho*, precio), **transportes** (origen/destino/tipo/precio) y **estancias** (alojamiento/ubicación/precio).
+- Totales por día y total del viaje en encabezado.
+
+### Panel de perfil
+
+- Datos personales y cambio de contraseña.
+- Sección **Mis facturas** con tabla, modal de detalle y descarga PDF.
+
+### Panel administrativo (`AdminView`)
+
+- KPIs desde `/api/admin/stats`: total de usuarios, free vs premium, viajes totales, ingresos sumados (€).
+- Tabla de usuarios con `withCount('trips')` y acciones: cambiar plan (`free`/`premium`) y eliminar (excepto el propio admin).
+- Tabla global de **facturas** con descarga PDF.
 
 ---
 
 ## Formularios clave
 
-| Formulario | Backend |
-|------------|---------|
-| Login / registro / reset | controladores auth + validación request |
-| Perfil / contraseña | **ProfileController** + requests |
-| Crear viaje | **StoreTripRequest** |
-| Pago simulado | **PaymentController** validación inline |
-| Actividad / día / transporte / estancia | requests dedicados / reglas parciales resource |
+| Formulario | Frontend | Backend |
+|------------|----------|---------|
+| Login | `LoginView.vue` | `AuthenticatedSessionController@store` (throttle 5/min) |
+| Registro | `RegisterView.vue` | `RegisteredUserController@store` |
+| Recuperación | `ForgotPasswordView.vue` / `ResetPasswordView.vue` | `PasswordResetLinkController` / `NewPasswordController` |
+| Perfil / contraseña | `ProfileView.vue` (form `reactive`) | `ProfileController@show/update/updatePassword` |
+| Crear viaje | `DashboardView.vue` (modal) | `StoreTripRequest` |
+| Editar viaje | `TripView.vue` / `TripHeader.vue` | `UpdateTripRequest` |
+| Actividad / día / transporte / estancia | Componentes de `components/trip/` con `defineProps`/`defineEmits` | `Store*Request` / `Update*Request` |
+| Pago simulado | `DashboardView.vue` (modal Tarjeta/Transferencia) | `PaymentController::simulate` (validación inline) |
+| Cambio de plan (admin) | `AdminView.vue` | `AdminController::updateUserPlan` |
 
-En cliente, validación básica complementa (fechas viaje, campos pago simulado, no enviar vacíos prohibidos) y los mensajes error API se muestran preferentemente crudos si JSON lo entrega.
+En el cliente, la validación básica complementa al servidor (fechas de viaje, no enviar campos vacíos prohibidos, etc.). Los mensajes de error del API se muestran preferentemente "crudos" si el JSON los entrega para conservar la información.
 
 ---
 
 ## Resumen
 
-El sistema combina **control de acceso por token**, **rol admin**, **plan comercial simulado con invoices/PDF**, **límites numéricos en servidor** y **experiencia cliente coherente** (toasts, banner, modales, perfil con historial factura) sin depender de un PSP externo.
+El sistema combina **control de acceso por token** (Sanctum), **rol admin** (middleware), **plan comercial simulado con invoices/PDF**, **límites numéricos en servidor** y **experiencia cliente coherente** (toasts, banners, modales, perfil con historial de facturas) sin depender de un PSP externo, cubriendo de forma completa los criterios SSG de gestión de usuarios, formularios y paneles de control.
