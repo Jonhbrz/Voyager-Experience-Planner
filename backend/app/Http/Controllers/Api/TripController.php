@@ -35,8 +35,14 @@ class TripController extends Controller
         $perPage = (int) $request->query('per_page', 0);
 
         if ($perPage === 0) {
-            $trips = Cache::remember(ApiCache::userTripsKey($userId), ApiCache::SHORT_TTL_SECONDS, function () use ($request, $userId) {
-                return TripResource::collection($this->tripIndexQuery($userId)->get())->resolve($request);
+            $trips = Cache::remember(ApiCache::userTripsKey($userId), ApiCache::SHORT_TTL_SECONDS, function () use ($userId) {
+                // Convertimos a array plano (json_encode/decode) para evitar
+                // cachear objetos JsonResource anidados que no se restauran bien
+                // si `cache.serializable_classes => false` (Laravel 11+).
+                return json_decode(
+                    TripResource::collection($this->tripIndexQuery($userId)->get())->toJson(),
+                    true
+                );
             });
 
             return $this->successResponse($trips, 200);
